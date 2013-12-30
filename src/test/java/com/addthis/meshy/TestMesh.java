@@ -55,7 +55,7 @@ public class TestMesh {
         assertEquals(check.getHostUUID(), test.getHostUUID());
     }
 
-    private final LinkedList<Meshy> resources = new LinkedList<Meshy>();
+    private final LinkedList<Meshy> resources = new LinkedList<>();
 
     public MeshyClient getClient(MeshyServer server) throws IOException {
         return getClient(server.getLocalPort());
@@ -114,7 +114,7 @@ public class TestMesh {
 
     @After
     public void cleanup() {
-        log.info("closing resources: " + resources.size());
+        log.info("closing resources: {}", resources.size());
         for (Meshy meshy : resources) {
             try {
                 meshy.close();
