@@ -19,8 +19,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
-import com.addthis.basis.util.Strings;
-
 import com.addthis.meshy.LocalFileHandler;
 import com.addthis.meshy.LocalFileSystem;
 import com.addthis.meshy.MeshyClient;
@@ -39,10 +37,7 @@ public class TestVFS extends TestMesh {
 
     @Before
     public void setup() {
-        System.setProperty("mesh.local.handlers", Strings.join(new String[]{
-                TestVFS.DummyHandler.class.getName(),          // for running in IntelliJ
-                TestVFS.DummyHandler.class.getCanonicalName()  // for running from cmd-line & maven
-        }, ","));
+        System.setProperty("mesh.local.handlers", DummyHandler.class.getName());
         LocalFileSystem.reloadHandlers();
         MeshyServer.resetFileSystems();
     }
