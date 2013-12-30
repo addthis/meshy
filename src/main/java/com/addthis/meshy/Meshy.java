@@ -268,7 +268,10 @@ public abstract class Meshy implements ChannelMaster, Closeable {
             }
         }
         sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
-        log.debug(this + " createSession " + sourceHandler + " target=" + targetHandler + " uuid=" + (targetUuid != null ? "'" + targetUuid + "'" : null) + " group=" + group + " sessionID=" + sessionID);
+        log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
+                this, sourceHandler, targetHandler,
+                targetUuid != null ? "'" + targetUuid + "'" : null,
+                group, sessionID);
     }
 
     /**
@@ -395,7 +398,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 ChannelState state = (ChannelState) ctx.getAttachment();
                 if (state == null) {
                     state = new ChannelState(Meshy.this, ctx.getChannel());
-                    log.trace(state + " created for " + ctx.hashCode());
+                    log.trace("{} created for {}", state, ctx.hashCode());
                     ctx.setAttachment(state);
                 }
                 return state;
