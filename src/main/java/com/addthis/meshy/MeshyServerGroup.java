@@ -56,14 +56,14 @@ public class MeshyServerGroup {
         statsThread = new Thread() {
             public void run() {
                 setName("MeshyStats");
-                if (Meshy.statsInterval <= 0) {
+                if (Meshy.STATS_INTERVAL <= 0) {
                     log.debug("stats thread disabled");
                     return;
                 }
                 while (true) {
                     emitStats();
                     try {
-                        Thread.sleep(Meshy.statsInterval);
+                        Thread.sleep(Meshy.STATS_INTERVAL);
                     } catch (Exception ignored) {
                         return;
                     }
@@ -201,7 +201,7 @@ public class MeshyServerGroup {
         }
 
         final boolean statsSkip = (bin | bout | bs.leaseOut | bs.leases | bs.returns) == 0;
-        if (Meshy.throttleLog && statsSkip && statsCountdown-- <= 0) {
+        if (Meshy.THROTTLE_LOG && statsSkip && statsCountdown-- <= 0) {
             return;
         }
 
@@ -216,7 +216,7 @@ public class MeshyServerGroup {
         if (!statsSkip) {
             statsCountdown = 2;
         }
-        if (gc.timeSpent > Meshy.statsInterval) {
+        if (gc.timeSpent > Meshy.STATS_INTERVAL) {
             StreamTarget.debugOpenTargets();
         }
     }
