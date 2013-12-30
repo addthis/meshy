@@ -47,8 +47,9 @@ public class TestVFS extends TestMesh {
         MeshyServer.resetFileSystems();
     }
 
-    @After
+    @After @Override
     public void cleanup() {
+        super.cleanup();
         System.setProperty("mesh.local.handlers", "");
         LocalFileSystem.reloadHandlers();
         MeshyServer.resetFileSystems();
@@ -61,17 +62,16 @@ public class TestVFS extends TestMesh {
         FileSource files = new FileSource(client, new String[]{"*"});
         files.waitComplete();
         Map<String, FileReference> map = files.getFileMap();
-        System.out.println("map=" + map);
+        log.info("map={}", map);
         checkFile(map, new FileReference("/dummy", 0, 0).setHostUUID(server.getUUID()));
     }
 
-    /** */
     public static class DummyHandler implements LocalFileHandler {
 
-        LinkedList<VirtualFileReference> list = new LinkedList<VirtualFileReference>();
+        LinkedList<VirtualFileReference> list = new LinkedList<>();
         VirtualFileReference ref = new DummyReference();
 
-        {
+        public DummyHandler() {
             list.add(ref);
         }
 
