@@ -17,6 +17,7 @@ import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.InputStream;
 
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -367,9 +368,14 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent ex) {
             updateLastEventTime();
-            log.warn("{} exception = {}", ctx.getAttachment(), ex);
-            if (!(ex.getCause() instanceof ClosedChannelException)) {
-                log.warn("", ex.getCause());
+            if (ex.getCause() instanceof ClosedChannelException) {
+                log.warn("{} exception = {}", ex, ctx.getAttachment());
+            } else if (ex.getCause() instanceof ConnectException) {
+                // it is expected for the thread who requested the connection to report an unexpected failure
+                log.debug("{} exception = {}", ex, ctx.getAttachment());
+            } else {
+                log.warn("Netty exception caught. Closing channel. ChannelState: {}",
+                        ctx.getAttachment(), ex.getCause());
                 ctx.getChannel().close();
             }
             try {
