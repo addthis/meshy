@@ -13,6 +13,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Created on 1/7/14.
+ *
+ * This could be extended to use the query portion of the URL to control other behaviors
+ * like selecting source, producing directory listings, adding read fault tolerance, etc
  */
 public class MeshyConnection extends URLConnection {
     public MeshyConnection(URL url) {
@@ -23,7 +26,7 @@ public class MeshyConnection extends URLConnection {
 
     @Override
     public void connect() throws IOException {
-        if (client != null) {
+        if (client == null) {
             this.client = new MeshyClient(url.getHost(), url.getPort());
         }
     }
@@ -35,6 +38,7 @@ public class MeshyConnection extends URLConnection {
 
     @Override
     public InputStream getInputStream() throws IOException {
+        connect();
         final AtomicReference<InputStream> in = new AtomicReference<InputStream>();
         final Semaphore lock = new Semaphore(1);
         try { lock.acquire(); } catch (Exception ex) { throw new IOException("lock exception"); }
