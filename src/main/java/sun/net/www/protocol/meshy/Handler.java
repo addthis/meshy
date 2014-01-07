@@ -10,8 +10,7 @@ import java.net.URLStreamHandler;
  */
 public class Handler extends URLStreamHandler {
     @Override
-    protected URLConnection openConnection(URL u) throws IOException
-    {
+    protected URLConnection openConnection(URL u) throws IOException {
         return new MeshyConnection(u);
     }
 }

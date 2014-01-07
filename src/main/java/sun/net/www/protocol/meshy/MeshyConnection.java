@@ -2,6 +2,8 @@ package sun.net.www.protocol.meshy;
 
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.service.file.FileReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -18,6 +20,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * like selecting source, producing directory listings, adding read fault tolerance, etc
  */
 public class MeshyConnection extends URLConnection {
+    private static final Logger log = LoggerFactory.getLogger(MeshyConnection.class);
+
     public MeshyConnection(URL url) {
         super(url);
     }
@@ -48,9 +52,10 @@ public class MeshyConnection extends URLConnection {
             public void receiveReference(FileReference ref) {
                 try {
                     in.set(client.readFile(ref));
-                    lock.release();
                 } catch (Exception ex) {
-                    ex.printStackTrace();
+                    log.trace("file list fail", ex);
+                } finally {
+                    lock.release();
                 }
             }
 
