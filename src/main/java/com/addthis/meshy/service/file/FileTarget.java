@@ -194,7 +194,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                         super.init(session, targetHandler, group);
                     }
 
-                    // called per individual remote mesh node response complete
+                    // called per individual remote meshy node response complete
                     @Override
                     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
                         super.receiveComplete(state, completedSession);
@@ -259,9 +259,9 @@ public class FileTarget extends TargetHandler implements Runnable {
                 FileReference flagRef = new FileReference("localfind", 0, 0);
                 FileTarget.this.send(flagRef.encode(null));
             }
-            //Expected conditions under which we should cleanup. If we do not expect a response from the mesh
+            //Expected conditions under which we should cleanup. If we do not expect a response from the meshy
             // (fileSource == null implies no remote request or an error attempting it; peerCount == 0 implies
-            // something similar) or if the mesh has already finished responding.
+            // something similar) or if the meshy has already finished responding.
             if (fileSource == null || fileSource.getPeerCount() == 0 || !firstDone.compareAndSet(false, true)) {
                 findTime.addAndGet(System.currentTimeMillis() - markTime);
                 findsRunning.dec();
@@ -294,7 +294,7 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     /**
      * Recursively (though it calls walkSafe for its recursion) walk through the filesystem to locate the
-     * requested files. Returns void because it streams the results out through the mesh network in place
+     * requested files. Returns void because it streams the results out through the meshy network in place
      * instead of appending to a results list. Remember that send() is asynchronous so this does not block
      * on network activity; it may block on disk i/o or various local handler implementations. Also the
      * results that it sends out may not be recieved as fast as imagined (queuing in meshy output).

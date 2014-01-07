@@ -495,7 +495,7 @@ public class MeshyServer extends Meshy {
     }
 
     /**
-     * thread that uses UDP to auto-mesh server instances
+     * thread that uses UDP to auto-meshy server instances
      *
      * @param port
      * @param timeout

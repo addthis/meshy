@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * MessageService allows transient client connections to offer services and extensions
- * to long-running core mesh services.  Query is an example of this, but it's not
+ * to long-running core meshy services.  Query is an example of this, but it's not
  * currently done that way.  RPC and virtual file extensions are likely implementations.
  */
 public class MessageTarget extends TargetHandler implements OutputSender, TopicSender {

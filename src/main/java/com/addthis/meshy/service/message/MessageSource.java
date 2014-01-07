@@ -28,7 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * runs in context of mesh client
+ * runs in context of meshy client
  */
 public class MessageSource extends SourceHandler implements OutputSender, TopicSender {
 

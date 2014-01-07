@@ -74,7 +74,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * full mesh nodes are both clients and servers. so the client logic is not exclusive to client-only nodes.
+ * full meshy nodes are both clients and servers. so the client logic is not exclusive to client-only nodes.
  * try not to let this confuse you when reading the code. this is a partial explanation as to why there are
  * client and server codes co-mingled.
  */
@@ -119,7 +119,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         registerHandlerClass(StreamTarget.class);
         registerHandlerClass(MessageSource.class);
         registerHandlerClass(MessageTarget.class);
-        /* create enum for "smart" auto-mesh */
+        /* create enum for "smart" auto-meshy */
         try {
             netIfEnum = NetworkInterface.getNetworkInterfaces();
         } catch (Exception ex) {
