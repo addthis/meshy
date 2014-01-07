@@ -32,6 +32,7 @@ public class StreamService {
 
     public static final String ERROR_EXCEED_OPEN = "Exceeded Max Open Files";
     public static final String ERROR_CHANNEL_LOST = "Channel Connection Lost";
+    public static final int STREAM_BYTE_OVERHEAD = 1;
 
     static final int MODE_START = 0;
     static final int MODE_MORE = 1;

@@ -44,6 +44,8 @@ public class ChannelState extends SimpleChannelHandler {
 
     protected static final BufferAllocator bufferFactory = new BufferAllocator();
 
+    public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
+
     protected static enum READMODE {
         ReadType, ReadSession, ReadLength, ReadData
     }
@@ -59,7 +61,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public static ChannelBuffer allocateSendBuffer(int type, int session, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(4 + 4 + 4 + length);
+        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -67,7 +69,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public static ChannelBuffer allocateSendBuffer(int type, int session, ChannelBuffer from, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(4 + 4 + 4 + length);
+        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);

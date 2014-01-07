@@ -399,7 +399,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     log.trace(this + " send add read=" + next.length);
                 }
                 StreamService.readBytes.addAndGet(next.length);
-                ChannelBuffer buf = getSendBuffer(next.length + 1);
+                ChannelBuffer buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
                 buf.writeByte(StreamService.MODE_MORE);
                 buf.writeBytes(next);
                 int bytesSent = send(buf, sender);
