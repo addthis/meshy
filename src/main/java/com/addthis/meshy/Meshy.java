@@ -24,10 +24,12 @@ import java.net.NetworkInterface;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -244,17 +246,16 @@ public abstract class Meshy implements ChannelMaster, Closeable {
      */
     @Override
     public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid) {
-        ChannelGroup group = new DefaultChannelGroup();
+        Set<Channel> group;
         HashSet<String> uuids = new HashSet<>();
-        boolean breakOnMatch = targetUuid != null && !targetUuid.isEmpty();
+        final boolean breakOnMatch = targetUuid != null && !targetUuid.isEmpty();
         int sessionID = nextSession.incrementAndGet();
         synchronized (connectedChannels) {
+            group = new HashSet<>(breakOnMatch ? 1 : connectedChannels.size());
             for (ChannelState state : connectedChannels) {
-                if (
-                        (targetUuid == MeshyConstants.LINK_ALL) ||
-                        (targetUuid == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
-                        (state.getName() != null && targetUuid.equals(state.getName()))
-                        ) {
+                if ((targetUuid == MeshyConstants.LINK_ALL) ||
+                    (targetUuid == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
+                    (state.getName() != null && targetUuid.equals(state.getName()))) {
                     /* prevent dups if >1 connection to the same host */
                     if (state.getName() != null && !uuids.add(state.getName())) {
                         continue;
@@ -268,6 +269,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 }
             }
         }
+        group = Collections.synchronizedSet(group);
         sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
         log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
                 this, sourceHandler, targetHandler,
