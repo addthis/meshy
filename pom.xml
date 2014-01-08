@@ -98,7 +98,7 @@
           </descriptors>
           <archive>
             <manifest>
-              <mainClass>com.clearspring.meshy.Main</mainClass>
+              <mainClass>com.addthis.meshy.Main</mainClass>
             </manifest>
           </archive>
         </configuration>
