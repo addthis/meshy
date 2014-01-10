@@ -157,14 +157,18 @@ public class SourceInputStream extends InputStream {
                         return false;
                     }
                 }
+
                 int sizeIncludingOverhead = data.length + ChannelState.MESHY_BYTE_OVERHEAD
                                             + StreamService.STREAM_BYTE_OVERHEAD;
-                int newExpectingBytes = expectingBytes.getAndAdd(-sizeIncludingOverhead);
-                if (newExpectingBytes < refillThreshold) {
-                    synchronized (expectingBytes) {
-                        if (expectingBytes.get() < refillThreshold) {
-                            requestMoreData();
-                        }
+
+                // returns previous value
+                int oldExpectingBytes = expectingBytes.getAndAdd(-sizeIncludingOverhead);
+                // if prior to our update, we were above the threshold
+                if (oldExpectingBytes >= refillThreshold) {
+                    int updatedExpectingBytes = oldExpectingBytes - sizeIncludingOverhead;
+                    // and without respect to the current value, we know our update moved it below
+                    if (updatedExpectingBytes < refillThreshold) {
+                        requestMoreData();
                     }
                 }
                 if (log.isTraceEnabled()) {
