@@ -18,10 +18,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.base.Objects;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 
 public abstract class TargetHandler implements SessionHandler {
@@ -79,7 +79,7 @@ public abstract class TargetHandler implements SessionHandler {
         return session;
     }
 
-    public void send(ChannelBuffer from, int length) {
+    public void send(ByteBuf from, int length) {
         if (log.isTraceEnabled()) {
             log.trace(this + " send.buf [" + length + "] " + from);
         }
@@ -105,11 +105,11 @@ public abstract class TargetHandler implements SessionHandler {
         channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, data, off, len), watcher, len);
     }
 
-    public ChannelBuffer getSendBuffer(int length) {
+    public ByteBuf getSendBuffer(int length) {
         return ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, length);
     }
 
-    public int send(ChannelBuffer buffer, SendWatcher watcher) {
+    public int send(ByteBuf buffer, SendWatcher watcher) {
         if (log.isTraceEnabled()) {
             log.trace(this + " send b=" + buffer + " l=" + buffer.readableBytes());
         }
@@ -124,7 +124,7 @@ public abstract class TargetHandler implements SessionHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int receivingSession, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int receivingSession, int length, ByteBuf buffer) throws Exception {
         assert this.channelState == state;
         assert this.session == receivingSession;
         if (log.isDebugEnabled()) {
@@ -175,7 +175,7 @@ public abstract class TargetHandler implements SessionHandler {
         }
     }
 
-    public abstract void receive(int length, ChannelBuffer buffer) throws Exception;
+    public abstract void receive(int length, ByteBuf buffer) throws Exception;
 
     public abstract void receiveComplete() throws Exception;
 }

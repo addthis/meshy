@@ -23,9 +23,10 @@ import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.SourceHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * runs in context of mesh client
@@ -42,7 +43,7 @@ public class MessageSource extends SourceHandler implements OutputSender, TopicS
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) {
+    public void receive(int length, ByteBuf buffer) {
         InputStream in = Meshy.getInput(length, buffer);
         String topic = null;
         try {

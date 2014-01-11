@@ -39,9 +39,10 @@ import com.google.common.base.Objects;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 public class StreamTarget extends TargetHandler implements Runnable, SendWatcher {
 
@@ -132,7 +133,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
         }
     }
 
-    private VirtualFileReference locateFile(VirtualFileSystem vfs, String path) {
+    private static VirtualFileReference locateFile(VirtualFileSystem vfs, String path) {
         if (log.isTraceEnabled()) {
             log.trace("locate " + vfs + " --> " + path);
         }
@@ -154,7 +155,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         byte[] data = Meshy.getBytes(length, buffer);
         if (remoteSource != null) {
             if (log.isTraceEnabled()) {
@@ -222,7 +223,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 } else {
                     remoteSource = new StreamSource(getChannelMaster(), nodeUuid, nodeUuid, fileName, params, maxSend) {
                         @Override
-                        public void receive(int length, ChannelBuffer buffer) throws Exception {
+                        public void receive(int length, ByteBuf buffer) throws Exception {
                             if (StreamService.DIRECT_COPY) {
                                 StreamTarget.this.send(buffer, length);
                             } else {
@@ -399,7 +400,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     log.trace(this + " send add read=" + next.length);
                 }
                 StreamService.readBytes.addAndGet(next.length);
-                ChannelBuffer buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
+                ByteBuf buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
                 buf.writeByte(StreamService.MODE_MORE);
                 buf.writeBytes(next);
                 int bytesSent = send(buf, sender);

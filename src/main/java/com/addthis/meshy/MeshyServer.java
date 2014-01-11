@@ -13,19 +13,15 @@
  */
 package com.addthis.meshy;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
-import java.net.SocketTimeoutException;
 
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -34,10 +30,8 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.zip.CRC32;
 
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
@@ -45,29 +39,25 @@ import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.service.message.InternalHandler;
 import com.addthis.meshy.service.message.MessageFileSystem;
-import com.addthis.meshy.service.peer.PeerService;
 import com.addthis.meshy.service.peer.PeerSource;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFactory;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 
 public class MeshyServer extends Meshy {
 
     protected static final Logger log = LoggerFactory.getLogger(MeshyServer.class);
 
-    private static final String secret = Parameter.value("meshy.secret");
     private static final boolean autoMesh = Parameter.boolValue("meshy.autoMesh", false);
     private static final boolean allowPeerLocal = Parameter.boolValue("meshy.peer.local", true); // permit peering in local VM
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
@@ -124,7 +114,7 @@ public class MeshyServer extends Meshy {
                 for (String vm : Strings.splitArray(registerVMs, ",")) {
                     try {
                         load.add((VirtualFileSystem) (Class.forName(vm).newInstance()));
-                    } catch (Throwable t) {
+                    } catch (Exception t) {
                         log.error("failure loading VM " + vm, t);
                     }
                 }
@@ -135,13 +125,12 @@ public class MeshyServer extends Meshy {
         return vfsList;
     }
 
-    private final int serverPort;
+    final int serverPort;
+    final MeshyServerGroup group;
     private final File rootDir;
     private final VirtualFileSystem filesystems[];
-    private final ChannelFactory serverFactory;
     private final List<Channel> serverChannel;
     private final String serverUuid;
-    private final MeshyServerGroup group;
 
     /**
      * This guard is used to ensure the close() method
@@ -174,7 +163,8 @@ public class MeshyServer extends Meshy {
 
     private InetSocketAddress serverLocal;
     private String serverNetIf;
-    private boolean initialized;
+    // TODO: revisit this one's visibility
+    boolean initialized;
 
     /**
      * server
@@ -194,25 +184,21 @@ public class MeshyServer extends Meshy {
         this.rootDir = rootDir;
         this.filesystems = loadFileSystems(rootDir);
         group.join(this);
-        serverFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
-        ServerBootstrap bootstrap = new ServerBootstrap(serverFactory);
-        bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                return Channels.pipeline(new MeshyChannelHandler());
-            }
-        });
-        // for parent channel
-        bootstrap.setOption("connectTimeoutMillis", 30000);
-        bootstrap.setOption("reuseAddress", true);
-        bootstrap.setOption("backlog", 1024);
-        // for children channels
-        bootstrap.setOption("child.tcpNoDelay", true);
-        bootstrap.setOption("child.keepAlive", true);
+        ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(workerGroup)
+                .channel(NioServerSocketChannel.class)
+                .option(ChannelOption.SO_BACKLOG, 1024)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
+                .option(ChannelOption.SO_REUSEADDR, true)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .childOption(ChannelOption.TCP_NODELAY, true)
+                .childHandler(new MeshyChannelnitializer(MeshyServer.this));
+
         serverChannel = new LinkedList<>();
         /* bind to one or more interfaces, if supplied, otherwise all */
         if (netif == null || netif.length == 0) {
             serverLocal = new InetSocketAddress(port);
-            serverChannel.add(bootstrap.bind(serverLocal));
+            serverChannel.add(bootstrap.bind(serverLocal).channel()); //async
         } else {
             for (String net : netif) {
                 NetworkInterface nicif = NetworkInterface.getByName(net);
@@ -227,7 +213,7 @@ public class MeshyServer extends Meshy {
                         continue;
                     }
                     serverLocal = new InetSocketAddress(inAddr, port);
-                    serverChannel.add(bootstrap.bind(serverLocal));
+                    serverChannel.add(bootstrap.bind(serverLocal).channel()); //async
                 }
                 serverNetIf = net;
             }
@@ -300,7 +286,7 @@ public class MeshyServer extends Meshy {
         /* servers peer with other servers once a channel comes up */
         // assign unique id (local or remote inferred)
         channelState.setName("temp-uuid-" + nextSession.incrementAndGet());
-        InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
+        InetSocketAddress address = (InetSocketAddress) channel.remoteAddress();
         if (needsPeering.remove(address)) {
             if (log.isDebugEnabled()) {
                 log.debug(MeshyServer.this + " >>> starting peering with " + address);
@@ -316,9 +302,6 @@ public class MeshyServer extends Meshy {
             if (!closeGuard.getAndSet(true)) {
                 log.debug(this + " exiting");
                 super.close();
-                if (serverFactory != null) {
-                    serverFactory.releaseExternalResources();
-                }
                 if (serverChannel != null) {
                     for (Channel ch : serverChannel) {
                         ch.close().awaitUninterruptibly();
@@ -406,8 +389,8 @@ public class MeshyServer extends Meshy {
         }
         /* skip peering with self */
         try {
-            for (Enumeration<NetworkInterface> eni = NetworkInterface.getNetworkInterfaces(); eni.hasMoreElements();) {
-                for (Enumeration<InetAddress> eaddr = eni.nextElement().getInetAddresses(); eaddr.hasMoreElements();) {
+            for (Enumeration<NetworkInterface> eni = NetworkInterface.getNetworkInterfaces(); eni.hasMoreElements(); ) {
+                for (Enumeration<InetAddress> eaddr = eni.nextElement().getInetAddresses(); eaddr.hasMoreElements(); ) {
                     InetAddress addr = eaddr.nextElement();
                     if (addr.equals(pAddr.getAddress()) && pAddr.getPort() == serverPort) {
                         if (log.isDebugEnabled()) {
@@ -502,128 +485,9 @@ public class MeshyServer extends Meshy {
      */
     private void startAutoMesh(final int port, final int timeout) {
         // create UDP broadcast / listener
-        Thread t = new Thread("Peer Listener " + port) {
-            private DatagramSocket newSocket() throws SocketException {
-                return new DatagramSocket(serverPort);
-            }
-
-            public void run() {
-                try (final DatagramSocket server = newSocket()) {
-                    server.setBroadcast(true);
-                    server.setSoTimeout(timeout);
-                    server.setReuseAddress(false);
-                    log.info(MeshyServer.this + " AutoMesh enabled server=" + server.getLocalAddress());
-                    long lastTransmit = 0;
-                    while (true) {
-                        long time = System.currentTimeMillis();
-                        if (time - lastTransmit > timeout) {
-                            if (log.isDebugEnabled()) {
-                                log.debug(MeshyServer.this + " AutoMesh.xmit " + group.getMembers().length + " members");
-                            }
-                            server.send(encode());
-                            lastTransmit = time;
-                        }
-                        try {
-                            DatagramPacket packet = new DatagramPacket(new byte[4096], 4096);
-                            server.receive(packet);
-                            if (log.isDebugEnabled()) {
-                                log.debug(MeshyServer.this + " AutoMesh.recv from: " + packet.getAddress() + " size=" + packet.getLength());
-                            }
-                            if (packet.getLength() > 0) {
-                                for (NodeInfo info : decode(packet)) {
-                                    if (log.isDebugEnabled()) {
-                                        log.debug(MeshyServer.this + " AutoMesh.recv: " + info.uuid + " : " + info.address + " from " + info.address);
-                                    }
-                                    connectToPeer(info.uuid, info.address);
-                                }
-                            }
-                        } catch (SocketTimeoutException sto) {
-                            // expected ... ignore
-                            if (log.isDebugEnabled()) {
-                                log.debug(MeshyServer.this + " AutoMesh listen timeout");
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    log.error(MeshyServer.this + " AutoMesh exit on " + e, e);
-                }
-            }
-
-            private DatagramPacket encode() throws IOException {
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                MeshyServer members[] = group.getMembers();
-                ArrayList<MeshyServer> readyList = new ArrayList<>(members.length);
-                for (MeshyServer meshy : members) {
-                    if (meshy.initialized) {
-                        readyList.add(meshy);
-                    }
-                }
-                Bytes.writeInt(readyList.size(), out);
-                for (MeshyServer meshy : readyList) {
-                    Bytes.writeString(meshy.getUUID(), out);
-                    PeerService.encodeAddress(meshy.getLocalAddress(), out);
-                }
-                if (secret != null) {
-                    Bytes.writeString(secret, out);
-                }
-                byte raw[] = out.toByteArray();
-                CRC32 crc = new CRC32();
-                crc.update(raw);
-                out = new ByteArrayOutputStream();
-                Bytes.writeBytes(raw, out);
-                Bytes.writeLength(crc.getValue(), out);
-                DatagramPacket p = new DatagramPacket(out.toByteArray(), out.size());
-                p.setAddress(InetAddress.getByAddress(new byte[]{(byte) 255, (byte) 255, (byte) 255, (byte) 255}));
-                p.setPort(port);
-                return p;
-            }
-
-            private Iterable<NodeInfo> decode(DatagramPacket packet) throws IOException {
-                InetAddress remote = packet.getAddress();
-                byte packed[] = packet.getData();
-                ByteArrayInputStream in = new ByteArrayInputStream(packed);
-                byte raw[] = Bytes.readBytes(in);
-                long crcValue = Bytes.readLength(in);
-                CRC32 crc = new CRC32();
-                crc.update(raw);
-                long crcCheck = crc.getValue();
-                if (crcCheck != crcValue) {
-                    throw new IOException("CRC mismatch " + crcValue + " != " + crcCheck);
-                }
-                in = new ByteArrayInputStream(raw);
-                LinkedList<NodeInfo> list = new LinkedList<>();
-                int meshies = Bytes.readInt(in);
-                while (meshies-- > 0) {
-                    String remoteUuid = Bytes.readString(in);
-                    InetSocketAddress address = PeerService.decodeAddress(in);
-                    InetAddress ina = address.getAddress();
-                    if (ina.isAnyLocalAddress() || ina.isLoopbackAddress()) {
-                        address = new InetSocketAddress(remote, address.getPort());
-                    }
-                    list.add(new NodeInfo(remoteUuid, address));
-                }
-                if (secret != null) {
-                    String compare = in.available() > 0 ? Bytes.readString(in) : "";
-                    /* discard peer's list if secret doesn't match */
-                    if (!compare.equals(secret)) {
-                        list.clear();
-                    }
-                }
-                return list;
-            }
-
-            class NodeInfo {
-
-                final String uuid;
-                final InetSocketAddress address;
-
-                NodeInfo(String uuid, InetSocketAddress address) {
-                    this.uuid = uuid;
-                    this.address = address;
-                }
-            }
-        };
-        t.setDaemon(true);
-        t.start();
+        Thread autoMeshThread = new Thread(new AutoMesher(this, port, timeout), "AutoMesh thread");
+        autoMeshThread.setDaemon(true);
+        autoMeshThread.start();
     }
+
 }

@@ -13,11 +13,10 @@
  */
 package com.addthis.meshy;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,16 +24,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.netty.DummyChannelGroup;
-
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.group.ChannelGroupFuture;
-import org.jboss.netty.channel.group.ChannelGroupFutureListener;
-import org.jboss.netty.channel.group.DefaultChannelGroupFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.ChannelGroupFuture;
+import io.netty.channel.group.ChannelGroupFutureListener;
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 
 public abstract class SourceHandler implements SessionHandler {
@@ -44,32 +42,24 @@ public abstract class SourceHandler implements SessionHandler {
     static final int DEFAULT_RESPONSE_TIMEOUT = Parameter.intValue("meshy.source.timeout", 0);
     static final boolean closeSlowChannels = Parameter.boolValue("meshy.source.closeSlow", false);
     static final Set<SourceHandler> activeSources = Collections.newSetFromMap(new ConcurrentHashMap<SourceHandler, Boolean>());
-    // TODO: use scheduled thread pool
-    static final Thread responseWatcher = new Thread("Source Response Watcher") {
-        {
-            setDaemon(true);
-            start();
-        }
+    static final ScheduledThreadPoolExecutor responseWatcher =
+            new ScheduledThreadPoolExecutor(1, new DefaultThreadFactory("Meshy Source Response Watcher"));
 
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    sleep(1000);
-                } catch (Exception ignored) {
-                    break;
-                }
+
+    static {
+        responseWatcher.scheduleWithFixedDelay(new Runnable() {
+            @Override
+            public void run() {
                 probeActiveSources();
             }
-            log.info(this + " exiting");
-        }
 
-        private void probeActiveSources() {
-            for (SourceHandler handler : activeSources) {
-                handler.handleChannelTimeouts();
+            private void probeActiveSources() {
+                for (SourceHandler handler : activeSources) {
+                    handler.handleChannelTimeouts();
+                }
             }
-        }
-    };
+        }, 1000, 1000, TimeUnit.MILLISECONDS);
+    }
 
     private final String className = getClass().getName();
     private final String shortName = className.substring(className.lastIndexOf(".") + 1);
@@ -84,7 +74,7 @@ public abstract class SourceHandler implements SessionHandler {
     private long readTime;
     private long readTimeout;
     private long completeTimeout;
-    private Set<Channel> channels;
+    private ChannelGroup channels;
     private ChannelState state;
 
     public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass) {
@@ -130,7 +120,7 @@ public abstract class SourceHandler implements SessionHandler {
         return state;
     }
 
-    public void init(int session, int targetHandler, Set<Channel> group) {
+    public void init(int session, int targetHandler, ChannelGroup group) {
         this.readTime = JitterClock.globalTime();
         this.session = session;
         this.channels = group;
@@ -155,6 +145,7 @@ public abstract class SourceHandler implements SessionHandler {
     /**
      * returned set must be synchronized on for iteration, and probably
      * should not modify the contents.
+     *
      * @return peers
      */
     public Set<Channel> getPeers() {
@@ -168,7 +159,7 @@ public abstract class SourceHandler implements SessionHandler {
                 if (sb.length() > 0) {
                     sb.append(",");
                 }
-                sb.append(channel.getRemoteAddress());
+                sb.append(channel.remoteAddress());
             }
         }
         return sb.toString();
@@ -188,7 +179,7 @@ public abstract class SourceHandler implements SessionHandler {
         return send(ChannelState.allocateSendBuffer(targetHandler, session, data), watcher, data.length);
     }
 
-    private boolean send(final ChannelBuffer buffer, final SendWatcher watcher, final int reportBytes) {
+    private boolean send(final ByteBuf buffer, final SendWatcher watcher, final int reportBytes) {
         if (log.isTraceEnabled()) {
             log.trace(this + " send " + buffer.capacity() + " to " + channels.size());
         }
@@ -201,18 +192,12 @@ public abstract class SourceHandler implements SessionHandler {
                     ex.printStackTrace();
                 }
             }
-            List<ChannelFuture> futures = new ArrayList<>(channels.size());
-            synchronized (channels) {
-                for (Channel c : channels) {
-                    futures.add(c.write(buffer.duplicate()));
-                }
-            }
-            ChannelGroupFuture future = new DefaultChannelGroupFuture(DummyChannelGroup.DUMMY, futures);
+            ChannelGroupFuture future = channels.writeAndFlush(buffer);
             future.addListener(new ChannelGroupFutureListener() {
                 @Override
                 public void operationComplete(ChannelGroupFuture future) throws Exception {
                     master.sentBytes(reportBytes * peerCount);
-                    state.returnSendBuffer(buffer);
+                    buffer.release();
                     if (watcher != null) {
                         watcher.sendFinished(reportBytes);
                     }
@@ -224,7 +209,7 @@ public abstract class SourceHandler implements SessionHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int receivingSession, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int receivingSession, int length, ByteBuf buffer) throws Exception {
         this.state = state;
         this.readTime = JitterClock.globalTime();
         if (log.isDebugEnabled()) {
@@ -274,7 +259,7 @@ public abstract class SourceHandler implements SessionHandler {
         StringBuilder stringBuilder = new StringBuilder(10 * channels.size());
         synchronized (channels) {
             for (Channel channel : channels) {
-                stringBuilder.append(channel.getRemoteAddress().toString());
+                stringBuilder.append(channel.remoteAddress().toString());
             }
         }
         return stringBuilder.toString();
@@ -295,7 +280,7 @@ public abstract class SourceHandler implements SessionHandler {
         }
     }
 
-    public abstract void receive(int length, ChannelBuffer buffer) throws Exception;
+    public abstract void receive(int length, ByteBuf buffer) throws Exception;
 
     public abstract void receiveComplete() throws Exception;
 }

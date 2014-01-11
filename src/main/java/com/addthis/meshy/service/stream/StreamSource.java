@@ -28,9 +28,10 @@ import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.SourceHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 public class StreamSource extends SourceHandler {
 
@@ -129,7 +130,7 @@ public class StreamSource extends SourceHandler {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int mode = in.read();
         if (log.isTraceEnabled()) {

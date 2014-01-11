@@ -23,7 +23,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -56,10 +55,12 @@ import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.Timer;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.group.ChannelGroup;
 
 public class FileTarget extends TargetHandler implements Runnable {
 
@@ -120,7 +121,7 @@ public class FileTarget extends TargetHandler implements Runnable {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
         if (log.isTraceEnabled()) {
             log.trace(this + " recv scope=" + scope + " msg=" + msg);
@@ -179,12 +180,12 @@ public class FileTarget extends TargetHandler implements Runnable {
                 forwardMetaDataOuter = forwardMetaData;
                 fileSource = new FileSource(getChannelMaster(), MeshyConstants.LINK_NAMED, paths.toArray(new String[paths.size()])) {
                     @Override
-                    public void receive(int length, ChannelBuffer buffer) throws Exception {
+                    public void receive(int length, ByteBuf buffer) throws Exception {
                         FileTarget.this.send(Meshy.getBytes(length, buffer));
                     }
 
                     @Override
-                    public void init(int session, int targetHandler, Set<Channel> group) {
+                    public void init(int session, int targetHandler, ChannelGroup group) {
                         if (forwardMetaData) {
                             //directly get size from group since channels is not set yet;
                             int peerCount = group.size();
@@ -224,7 +225,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                                 if (sb.length() > 0) {
                                     sb.append(',');
                                 }
-                                sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
+                                sb.append(((InetSocketAddress) peer.remoteAddress()).getHostName());
                             }
                             return sb.toString();
                         } catch (Exception e) {

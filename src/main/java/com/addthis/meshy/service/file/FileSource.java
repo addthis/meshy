@@ -27,13 +27,14 @@ import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.SourceHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty.buffer.ByteBuf;
+
 public class FileSource extends SourceHandler {
 
-    protected static final Logger log = LoggerFactory.getLogger(FileTarget.class);
+    protected static final Logger log = LoggerFactory.getLogger(FileSource.class);
     static final boolean traceComplete = Parameter.boolValue("meshy.finder.debug.complete", false);
 
     private final LinkedList<FileReference> list = new LinkedList<>();
@@ -100,7 +101,7 @@ public class FileSource extends SourceHandler {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         /* sync not required b/c overridden in server-server calls */
         FileReference ref = new FileReference(Meshy.getBytes(length, buffer));
         if (filter == null || filter.accept(ref)) {

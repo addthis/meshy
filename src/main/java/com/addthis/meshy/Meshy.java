@@ -17,26 +17,21 @@ import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.InputStream;
 
-import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import java.nio.channels.ClosedChannelException;
 import java.text.DecimalFormat;
 
 import com.addthis.basis.util.JitterClock;
@@ -59,24 +54,20 @@ import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.VirtualMachineMetrics;
 
-import org.jboss.netty.bootstrap.ClientBootstrap;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFactory;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.ChannelStateEvent;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.ExceptionEvent;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelHandler;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.channel.group.DefaultChannelGroup;
-import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.GlobalEventExecutor;
 
 /**
  * full mesh nodes are both clients and servers. so the client logic is not exclusive to client-only nodes.
@@ -88,7 +79,6 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     // system property constants
     static final boolean THROTTLE_LOG = Parameter.boolValue("meshy.throttleLog", true);
     static final int STATS_INTERVAL = Parameter.intValue("meshy.stats.time", 1) * 1000;
-
     static final Map<Integer, Class<? extends SessionHandler>> idHandlerMap = new HashMap<>();
     static final Map<Class<? extends SessionHandler>, Integer> handlerIdMap = new HashMap<>();
     static final AtomicInteger nextHandlerID = new AtomicInteger(1);
@@ -96,12 +86,10 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     static final VirtualMachineMetrics vmMetrics = VirtualMachineMetrics.getInstance();
     static final AtomicInteger nextSession = new AtomicInteger(0);
     static final Enumeration<NetworkInterface> netIfEnum;
-
     // metrics and logging
     private static final Logger log = LoggerFactory.getLogger(Meshy.class);
     private static final Meter bytesInMeter = Metrics.newMeter(Meshy.class, "bytesIn", "bytesIn", TimeUnit.SECONDS);
     private static final Meter bytesOutMeter = Metrics.newMeter(Meshy.class, "bytesOut", "bytesOut", TimeUnit.SECONDS);
-
     private static final String HOSTNAME = getShortHostName();
 
     // static init block
@@ -128,12 +116,11 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     protected final HashSet<InetSocketAddress> needsPeering = new HashSet<>();
     /* nodes actively being peered */
     protected final HashSet<String> inPeering = new HashSet<>();
-
-    private final ChannelFactory clientFactory;
-    private final ClientBootstrap clientBootstrap;
+    protected final EventLoopGroup workerGroup = new NioEventLoopGroup();
+    private final Bootstrap clientBootstrap;
     private final String uuid;
     private final AtomicLong lastEvent = new AtomicLong(0);
-    private final ChannelGroup allChannels = new DefaultChannelGroup();
+    private final ChannelGroup allChannels = new DefaultChannelGroup("meshy peers", GlobalEventExecutor.INSTANCE);
     private final AtomicInteger bytesIn = new AtomicInteger(0);
     private final AtomicInteger bytesOut = new AtomicInteger(0);
     private final Collection<ChannelCloseListener> channelCloseListeners = new ArrayList<>();
@@ -144,16 +131,13 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         } else {
             uuid = Long.toHexString(UUID.randomUUID().getMostSignificantBits());
         }
-        clientFactory = new NioClientSocketChannelFactory(Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
-        clientBootstrap = new ClientBootstrap(clientFactory);
-        clientBootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                return Channels.pipeline(new MeshyChannelHandler());
-            }
-        });
-        clientBootstrap.setOption("tcpNoDelay", true);
-        clientBootstrap.setOption("keepAlive", true);
-        clientBootstrap.setOption("connectTimeoutMillis", 30000);
+        clientBootstrap = new Bootstrap()
+                .group(workerGroup)
+                .channel(NioSocketChannel.class)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.TCP_NODELAY, true)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
+                .handler(new MeshyChannelnitializer(this));
         updateLastEventTime();
     }
 
@@ -169,14 +153,14 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
     }
 
-    public static InputStream getInput(int length, ChannelBuffer buffer) {
+    public static InputStream getInput(int length, ByteBuf buffer) {
         return new ByteArrayInputStream(getBytes(length, buffer));
     }
 
     /**
      * utility
      */
-    public static byte[] getBytes(int length, ChannelBuffer buffer) {
+    public static byte[] getBytes(int length, ByteBuf buffer) {
         byte request[] = new byte[length];
         buffer.readBytes(request);
         return request;
@@ -204,7 +188,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
             }
         }
         allChannels.close().awaitUninterruptibly();
-        clientFactory.releaseExternalResources();
+        workerGroup.shutdownGracefully();
     }
 
     protected ChannelFuture connect(InetSocketAddress addr) {
@@ -246,12 +230,12 @@ public abstract class Meshy implements ChannelMaster, Closeable {
      */
     @Override
     public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid) {
-        Set<Channel> group;
+        ChannelGroup group;
         HashSet<String> uuids = new HashSet<>();
         final boolean breakOnMatch = targetUuid != null && !targetUuid.isEmpty();
         int sessionID = nextSession.incrementAndGet();
         synchronized (connectedChannels) {
-            group = new HashSet<>(breakOnMatch ? 1 : connectedChannels.size());
+            group = new DefaultChannelGroup(Integer.toString(sessionID), GlobalEventExecutor.INSTANCE);
             for (ChannelState state : connectedChannels) {
                 if ((targetUuid == MeshyConstants.LINK_ALL) ||
                     (targetUuid == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
@@ -269,7 +253,6 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 }
             }
         }
-        group = Collections.synchronizedSet(group);
         sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
         log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
                 this, sourceHandler, targetHandler,
@@ -316,12 +299,12 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         synchronized (connectedChannels) {
             connectedChannels.add(channelState);
         }
-        log.debug("{} connectChannel @ {}", this, channel.getRemoteAddress());
+        log.debug("{} connectChannel @ {}", this, channel.remoteAddress());
     }
 
-    private void closeChannel(Channel channel) {
+    void closeChannel(Channel channel) {
         allChannels.remove(channel);
-        if (channel.getId() != null) {
+        if (channel != null) {
             synchronized (connectedChannels) {
                 ChannelState match = null;
                 for (ChannelState state : connectedChannels) {
@@ -337,11 +320,11 @@ public abstract class Meshy implements ChannelMaster, Closeable {
             }
             synchronized (channelCloseListeners) {
                 for (ChannelCloseListener channelCloseListener : channelCloseListeners) {
-                    channelCloseListener.channelClosed(channel.getId());
+                    channelCloseListener.channelClosed(channel);
                 }
             }
         }
-        log.debug("{} closeChannel @ {}", this, channel.getRemoteAddress());
+        log.debug("{} closeChannel @ {}", this, channel.remoteAddress());
     }
 
     public boolean addChannelCloseListener(ChannelCloseListener channelCloseListener) {
@@ -353,64 +336,6 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     public boolean removeChannelCloseListener(ChannelCloseListener channelCloseListener) {
         synchronized (this.channelCloseListeners) {
             return this.channelCloseListeners.remove(channelCloseListener);
-        }
-    }
-
-    /**
-     * one channel handler is created per meshy instance (client or server)
-     */
-    class MeshyChannelHandler extends SimpleChannelHandler {
-
-        @Override
-        public void messageReceived(ChannelHandlerContext ctx, MessageEvent msg) {
-            updateLastEventTime();
-            getAttachState(ctx).messageReceived(msg);
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent ex) {
-            updateLastEventTime();
-            if (ex.getCause() instanceof ClosedChannelException) {
-                log.warn("{} exception = {}", ex, ctx.getAttachment());
-            } else if (ex.getCause() instanceof ConnectException) {
-                // it is expected for the thread who requested the connection to report an unexpected failure
-                log.debug("{} exception = {}", ex, ctx.getAttachment());
-            } else {
-                log.warn("Netty exception caught. Closing channel. ChannelState: {}",
-                        ctx.getAttachment(), ex.getCause());
-                ctx.getChannel().close();
-            }
-            try {
-                channelClosed(ctx, null);
-            } catch (Exception ee) {
-                log.error("Mystery exception we are swallowing", ee);
-            }
-        }
-
-        @Override
-        public void channelConnected(ChannelHandlerContext ctx, ChannelStateEvent e) {
-            updateLastEventTime();
-            connectChannel(ctx.getChannel(), getAttachState(ctx));
-            getAttachState(ctx).channelConnected(e);
-        }
-
-        @Override
-        public void channelClosed(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
-            updateLastEventTime();
-            getAttachState(ctx).channelClosed(e);
-            closeChannel(ctx.getChannel());
-        }
-
-        private ChannelState getAttachState(ChannelHandlerContext ctx) {
-            synchronized (ctx) {
-                ChannelState state = (ChannelState) ctx.getAttachment();
-                if (state == null) {
-                    state = new ChannelState(Meshy.this, ctx.getChannel());
-                    log.trace("{} created for {}", state, ctx.hashCode());
-                    ctx.setAttachment(state);
-                }
-                return state;
-            }
         }
     }
 }

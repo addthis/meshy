@@ -22,27 +22,24 @@ import com.addthis.basis.util.Parameter;
 
 import com.google.common.base.Objects;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.channel.ChannelStateEvent;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 
 
 /**
  * TODO implement pinger to teardown "dead" peers
  */
-public class ChannelState extends SimpleChannelHandler {
+public class ChannelState {
 
     private static final Logger log = LoggerFactory.getLogger(ChannelState.class);
     private static final int excessiveTargets = Parameter.intValue("meshy.channel.report.targets", 2000);
     private static final int excessiveSources = Parameter.intValue("meshy.channel.report.sources", 2000);
-
-    protected static final BufferAllocator bufferFactory = new BufferAllocator();
 
     public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
 
@@ -50,26 +47,26 @@ public class ChannelState extends SimpleChannelHandler {
         ReadType, ReadSession, ReadLength, ReadData
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, byte[] data) {
+    public static ByteBuf allocateSendBuffer(int type, int session, byte[] data) {
         return allocateSendBuffer(type, session, data, 0, data.length);
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, byte[] data, int off, int len) {
-        ChannelBuffer sendBuffer = allocateSendBuffer(type, session, len);
+    public static ByteBuf allocateSendBuffer(int type, int session, byte[] data, int off, int len) {
+        ByteBuf sendBuffer = allocateSendBuffer(type, session, len);
         sendBuffer.writeBytes(data, off, len);
         return sendBuffer;
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
+    public static ByteBuf allocateSendBuffer(int type, int session, int length) {
+        ByteBuf sendBuffer = PooledByteBufAllocator.DEFAULT.buffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
         return sendBuffer;
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, ChannelBuffer from, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
+    public static ByteBuf allocateSendBuffer(int type, int session, ByteBuf from, int length) {
+        ByteBuf sendBuffer = PooledByteBufAllocator.DEFAULT.buffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -77,16 +74,12 @@ public class ChannelState extends SimpleChannelHandler {
         return sendBuffer;
     }
 
-    public static void returnSendBuffer(ChannelBuffer buffer) {
-        bufferFactory.returnBuffer(buffer);
-    }
-
     private final ConcurrentHashMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMap<>();
     private final ChannelMaster master;
     private final Channel channel;
 
-    private ChannelBuffer buffer = bufferFactory.allocateBuffer(16384);
+    private ByteBuf buffer = PooledByteBufAllocator.DEFAULT.buffer(16384);
     private READMODE mode = READMODE.ReadType;
     private int type;
     private int session;
@@ -130,14 +123,14 @@ public class ChannelState extends SimpleChannelHandler {
         }
     }
 
-    public boolean send(final ChannelBuffer sendBuffer, final SendWatcher watcher, final int reportBytes) {
+    public boolean send(final ByteBuf sendBuffer, final SendWatcher watcher, final int reportBytes) {
         if (channel.isOpen()) {
             ChannelFuture future = channel.write(sendBuffer);
             future.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture ignored) throws Exception {
                     master.sentBytes(reportBytes);
-                    returnSendBuffer(sendBuffer);
+                    sendBuffer.release();
                     if (watcher != null) {
                         watcher.sendFinished(reportBytes);
                     }
@@ -188,7 +181,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public InetSocketAddress getChannelRemoteAddress() {
-        return channel != null ? (InetSocketAddress) channel.getRemoteAddress() : null;
+        return channel != null ? (InetSocketAddress) channel.remoteAddress() : null;
     }
 
     public ChannelMaster getChannelMaster() {
@@ -212,12 +205,12 @@ public class ChannelState extends SimpleChannelHandler {
         }
     }
 
-    public void channelConnected(ChannelStateEvent e) {
-        log.debug(this + " channel:connect [" + this.hashCode() + "] " + e);
+    public void channelRegistered() {
+        log.debug(this + " channel:connect [" + this.hashCode() + "]");
     }
 
-    public void channelClosed(ChannelStateEvent e) throws Exception {
-        log.debug(this + " channel:close [" + this.hashCode() + "] " + e);
+    public void channelClosed() throws Exception {
+        log.debug(this + " channel:close [" + this.hashCode() + "]");
         for (Map.Entry<Integer, SessionHandler> entry : targetHandlers.entrySet()) {
             entry.getValue().receiveComplete(this, entry.getKey());
         }
@@ -226,19 +219,20 @@ public class ChannelState extends SimpleChannelHandler {
         }
     }
 
-    public void messageReceived(MessageEvent msg) {
+    // TODO: replace with netty decoder from MCI
+    public void channelRead(Object msg) {
         if (log.isTraceEnabled()) {
             log.trace(this + " recv msg=" + msg);
         }
-        final ChannelBuffer in = (ChannelBuffer) msg.getMessage();
+        final ByteBuf in = (ByteBuf) msg;
         master.recvBytes(in.readableBytes());
         if (buffer.writableBytes() >= in.readableBytes()) {
             buffer.writeBytes(in);
         } else {
-            ChannelBuffer out = bufferFactory.allocateBuffer(in.readableBytes() + buffer.readableBytes());
+            ByteBuf out = PooledByteBufAllocator.DEFAULT.buffer(in.readableBytes() + buffer.readableBytes());
             out.writeBytes(buffer);
             out.writeBytes(in);
-            returnSendBuffer(buffer);
+            buffer.release();
             buffer = out;
             if (log.isDebugEnabled()) {
                 log.debug(this + " recv.reallocate: " + out.writableBytes());

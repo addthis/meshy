@@ -16,12 +16,13 @@ package com.addthis.meshy.service.peer;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.TargetHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
+
 
 public class PeerTarget extends TargetHandler {
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         if (log.isDebugEnabled()) {
             log.debug(this + " decode from " + getChannelState().getChannelRemoteAddress());
         }
