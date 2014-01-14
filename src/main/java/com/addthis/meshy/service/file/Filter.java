@@ -13,8 +13,8 @@
  */
 package com.addthis.meshy.service.file;
 
-import com.addthis.meshy.VirtualFileFilter;
-import com.addthis.meshy.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

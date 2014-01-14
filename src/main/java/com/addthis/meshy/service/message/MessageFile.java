@@ -21,9 +21,9 @@ import java.util.Map;
 
 import com.addthis.basis.util.JitterClock;
 
-import com.addthis.meshy.VirtualFileFilter;
-import com.addthis.meshy.VirtualFileInput;
-import com.addthis.meshy.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileReference;
 
 class MessageFile implements VirtualFileReference {
 

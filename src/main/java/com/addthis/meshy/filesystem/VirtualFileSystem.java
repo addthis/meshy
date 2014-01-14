@@ -11,23 +11,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy;
-
-import java.util.Iterator;
-import java.util.Map;
+package com.addthis.meshy.filesystem;
 
 
-public interface VirtualFileReference {
+public interface VirtualFileSystem {
 
-    public String getName();
+    public String[] tokenizePath(String path);
 
-    public long getLastModified();
-
-    public long getLength();
-
-    public Iterator<VirtualFileReference> listFiles(VirtualFileFilter filter);
-
-    public VirtualFileReference getFile(String name);
-
-    public VirtualFileInput getInput(Map<String, String> options);
+    public VirtualFileReference getFileRoot();
 }

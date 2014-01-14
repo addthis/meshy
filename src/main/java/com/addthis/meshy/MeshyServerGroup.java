@@ -23,6 +23,8 @@ import java.util.concurrent.TimeUnit;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.service.file.InputStreamWrapper;
+import com.addthis.meshy.service.file.LocalFileHandlerMux;
 import com.addthis.meshy.service.file.FileStats;
 import com.addthis.meshy.service.stream.StreamStats;
 import com.addthis.meshy.service.stream.StreamTarget;

@@ -19,7 +19,7 @@ import java.io.IOException;
 
 import com.addthis.basis.util.Bytes;
 
-import com.addthis.meshy.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileReference;
 
 import com.google.common.base.Objects;
 

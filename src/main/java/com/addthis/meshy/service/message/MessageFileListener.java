@@ -17,7 +17,7 @@ import java.util.Map;
 
 import com.addthis.basis.util.JitterClock;
 
-import com.addthis.meshy.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileInput;
 
 class MessageFileListener extends MessageFile {
 

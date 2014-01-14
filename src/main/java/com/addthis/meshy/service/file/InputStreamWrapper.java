@@ -11,7 +11,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy;
+package com.addthis.meshy.service.file;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.addthis.basis.util.Parameter;
+
+import com.addthis.meshy.filesystem.VirtualFileInput;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;

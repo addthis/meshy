@@ -31,9 +31,9 @@ import com.addthis.basis.util.Parameter;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.SendWatcher;
 import com.addthis.meshy.TargetHandler;
-import com.addthis.meshy.VirtualFileInput;
-import com.addthis.meshy.VirtualFileReference;
-import com.addthis.meshy.VirtualFileSystem;
+import com.addthis.meshy.filesystem.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
 
 import com.google.common.base.Objects;
 import com.google.common.util.concurrent.MoreExecutors;

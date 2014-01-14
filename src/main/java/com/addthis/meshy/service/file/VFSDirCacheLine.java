@@ -17,7 +17,7 @@ import java.util.LinkedList;
 
 import com.addthis.basis.util.JitterClock;
 
-import com.addthis.meshy.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileReference;
 
 public final class VFSDirCacheLine {
 

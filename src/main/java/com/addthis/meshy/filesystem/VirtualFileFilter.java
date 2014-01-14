@@ -11,12 +11,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy;
+package com.addthis.meshy.filesystem;
 
 
-public interface VirtualFileSystem {
+public interface VirtualFileFilter {
 
-    public String[] tokenizePath(String path);
+    public boolean accept(VirtualFileReference ref);
 
-    public VirtualFileReference getFileRoot();
+    public boolean singleMatch();
+
+    public String getToken();
 }

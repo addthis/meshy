@@ -22,8 +22,8 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Strings;
 
-import com.addthis.meshy.VirtualFileReference;
-import com.addthis.meshy.VirtualFileSystem;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

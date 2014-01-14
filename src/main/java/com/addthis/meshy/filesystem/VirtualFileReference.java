@@ -11,18 +11,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy;
-
-import java.io.File;
+package com.addthis.meshy.filesystem;
 
 import java.util.Iterator;
+import java.util.Map;
 
 
-public interface LocalFileHandler {
+public interface VirtualFileReference {
 
-    public boolean canHandleDirectory(File dir);
+    public String getName();
 
-    public Iterator<VirtualFileReference> listFiles(File dir, VirtualFileFilter filter);
+    public long getLastModified();
 
-    public VirtualFileReference getFile(File dir, String name);
+    public long getLength();
+
+    public Iterator<VirtualFileReference> listFiles(VirtualFileFilter filter);
+
+    public VirtualFileReference getFile(String name);
+
+    public VirtualFileInput getInput(Map<String, String> options);
 }

@@ -37,6 +37,8 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
 
+import com.addthis.meshy.service.file.LocalFileSystem;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
 import com.addthis.meshy.service.message.InternalHandler;
 import com.addthis.meshy.service.message.MessageFileSystem;
 import com.addthis.meshy.service.peer.PeerSource;

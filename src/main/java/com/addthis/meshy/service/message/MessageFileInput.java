@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileInput;
 
 class MessageFileInput implements VirtualFileInput, TargetListener {
 
