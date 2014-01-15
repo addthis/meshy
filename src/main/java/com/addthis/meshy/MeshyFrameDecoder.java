@@ -14,22 +14,19 @@
 
 package com.addthis.meshy;
 
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelInitializer;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 
-class MeshyChannelnitializer extends ChannelInitializer<Channel> {
+class MeshyFrameDecoder extends LengthFieldBasedFrameDecoder {
 
-    private Meshy meshy;
-
-    public MeshyChannelnitializer(Meshy meshy) {
-        this.meshy = meshy;
+    public MeshyFrameDecoder(int maxFrameLength, int lengthFieldOffset, int lengthFieldLength) {
+        super(maxFrameLength, lengthFieldOffset, lengthFieldLength);
     }
 
     @Override
-    public void initChannel(Channel channel) throws Exception {
-        channel.pipeline().addLast(
-                new MeshyFrameDecoder(16384, 8, 4),
-                new MeshyChannelHandler(meshy, channel)
-        );
+    protected ByteBuf extractFrame(ChannelHandlerContext ctx, ByteBuf buffer, int index, int length) {
+        return buffer.slice(index, length);
     }
+
 }

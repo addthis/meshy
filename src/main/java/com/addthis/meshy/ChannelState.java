@@ -43,10 +43,6 @@ public class ChannelState {
 
     public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
 
-    protected static enum READMODE {
-        ReadType, ReadSession, ReadLength, ReadData
-    }
-
     public static ByteBuf allocateSendBuffer(int type, int session, byte[] data) {
         return allocateSendBuffer(type, session, data, 0, data.length);
     }
@@ -79,17 +75,11 @@ public class ChannelState {
     private final ChannelMaster master;
     private final Channel channel;
 
-    private ByteBuf buffer = PooledByteBufAllocator.DEFAULT.buffer(16384);
-    private READMODE mode = READMODE.ReadType;
-    private int type;
-    private int session;
-    private int length;
     private String name;
     //    private int remotePort;
     private InetSocketAddress remoteAddress;
 
     ChannelState(ChannelMaster master, Channel channel) {
-        super();
         this.master = master;
         this.channel = channel;
     }
@@ -100,10 +90,6 @@ public class ChannelState {
                 .add("sources", sourceHandlers.size())
                 .add("name", name)
                 .add("remoteAddress", remoteAddress)
-                .add("mode", mode)
-                .add("type", type)
-                .add("session", session)
-                .add("length", length)
                 .add("channel", channel)
                 .add("master", master.getUUID());
     }
@@ -219,110 +205,61 @@ public class ChannelState {
         }
     }
 
-    // TODO: replace with netty decoder from MCI
     public void channelRead(Object msg) {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv msg=" + msg);
-        }
-        final ByteBuf in = (ByteBuf) msg;
-        master.recvBytes(in.readableBytes());
-        if (buffer.writableBytes() >= in.readableBytes()) {
-            buffer.writeBytes(in);
+        log.trace("{} recv msg={}", this, msg);
+        final ByteBuf buffer = (ByteBuf) msg;
+        master.recvBytes(buffer.readableBytes());
+        // zero signifies a reply to a source
+        int type = buffer.readInt();
+        int session = buffer.readInt();
+        // zero length signifies end of session
+        int length = buffer.readInt();
+        SessionHandler handler = null;
+        if (type == MeshyConstants.KEY_RESPONSE) {
+            handler = sourceHandlers.get(session);
         } else {
-            ByteBuf out = PooledByteBufAllocator.DEFAULT.buffer(in.readableBytes() + buffer.readableBytes());
-            out.writeBytes(buffer);
-            out.writeBytes(in);
-            buffer.release();
-            buffer = out;
-            if (log.isDebugEnabled()) {
-                log.debug(this + " recv.reallocate: " + out.writableBytes());
+            handler = targetHandlers.get(session);
+            if (handler == null && master instanceof MeshyServer) {
+                handler = master.createHandler(type);
+                ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
+                if (log.isDebugEnabled()) {
+                    log.debug(this + " createHandler " + handler + " session=" + session);
+                }
+                if (targetHandlers.put(session, handler) != null) {
+                    log.debug("clobbered session " + session + " with " + handler);
+                }
+                if (targetHandlers.size() >= excessiveTargets) {
+                    log.debug("excessive targets reached, current targetHandlers = " + targetHandlers.size());
+                    if (log.isTraceEnabled()) {
+                        debugSessions();
+                    }
+                }
             }
         }
-        loop:
-        while (true) {
-            switch (mode) {
-                // zero signifies a reply to a source
-                case ReadType:
-                    if (buffer.readableBytes() < 4) {
-                        break loop;
-                    }
-                    type = buffer.readInt();
-                    mode = READMODE.ReadSession;
-                    continue;
-                case ReadSession:
-                    if (buffer.readableBytes() < 4) {
-                        break loop;
-                    }
-                    session = buffer.readInt();
-                    mode = READMODE.ReadLength;
-                    continue;
-                    // zero length signifies end of session
-                case ReadLength:
-                    if (buffer.readableBytes() < 4) {
-                        break loop;
-                    }
-                    length = buffer.readInt();
-                    mode = READMODE.ReadData;
-                    continue;
-                case ReadData:
-                    int readable = buffer.readableBytes();
-                    if (readable < length) {
-                        break loop;
-                    }
-                    SessionHandler handler = null;
+        if (handler != null) {
+            try {
+                if (length == 0) {
+                    handler.receiveComplete(this, session);
                     if (type == MeshyConstants.KEY_RESPONSE) {
-                        handler = sourceHandlers.get(session);
+                        sourceHandlers.remove(session);
+                        if (log.isDebugEnabled()) {
+                            log.debug(this + " dropSession session=" + session);
+                        }
                     } else {
-                        handler = targetHandlers.get(session);
-                        if (handler == null && master instanceof MeshyServer) {
-                            handler = master.createHandler(type);
-                            ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
-                            if (log.isDebugEnabled()) {
-                                log.debug(this + " createHandler " + handler + " session=" + session);
-                            }
-                            if (targetHandlers.put(session, handler) != null) {
-                                log.debug("clobbered session " + session + " with " + handler);
-                            }
-                            if (targetHandlers.size() >= excessiveTargets) {
-                                log.debug("excessive targets reached, current targetHandlers = " + targetHandlers.size());
-                                if (log.isTraceEnabled()) {
-                                    debugSessions();
-                                }
-                            }
-                        }
+                        targetHandlers.remove(session);
                     }
-                    if (handler != null) {
-                        try {
-                            if (length == 0) {
-                                handler.receiveComplete(this, session);
-                                if (type == MeshyConstants.KEY_RESPONSE) {
-                                    sourceHandlers.remove(session);
-                                    if (log.isDebugEnabled()) {
-                                        log.debug(this + " dropSession session=" + session);
-                                    }
-                                } else {
-                                    targetHandlers.remove(session);
-                                }
-                            } else {
-                                handler.receive(this, session, length, buffer);
-                            }
-                        } catch (Exception ex) {
-                            log.warn("messageReceived error", ex);
-                        }
-                    }
-                    int read = readable - buffer.readableBytes();
-                    if (read < length) {
-                        if (handler != null || log.isDebugEnabled()) {
-                            log.debug(this + " recv type=" + type + " handler=" + handler + " ssn=" + session + " did not consume all bytes (read=" + read + " of " + length + ")");
-                        }
-                        buffer.skipBytes(length - read);
-                    }
-                    mode = READMODE.ReadType;
-                    continue;
-                default:
-                    throw new RuntimeException("invalid state");
+                } else {
+                    handler.receive(this, session, length, buffer);
+                }
+            } catch (Exception ex) {
+                log.warn("messageReceived error", ex);
             }
         }
-        buffer.discardReadBytes();
+        int unread = buffer.readableBytes();
+        if (unread > 0) {
+            if ((handler != null) || log.isDebugEnabled()) {
+                log.debug(this + " recv type=" + type + " handler=" + handler + " ssn=" + session + " did not consume all bytes (unread=" + unread + " of " + length + ")");
+            }
+        }
     }
 }

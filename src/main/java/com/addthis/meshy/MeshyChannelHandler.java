@@ -20,9 +20,9 @@ import java.nio.channels.ClosedChannelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
-import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 
 /**
@@ -31,19 +31,20 @@ import io.netty.util.ReferenceCountUtil;
 class MeshyChannelHandler extends ChannelInboundHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(MeshyChannelHandler.class);
-    private static final AttributeKey<ChannelState> STATE =
-            AttributeKey.valueOf("MeshyChannel.state");
 
-    private Meshy meshy;
+    private final Meshy meshy;
+    private final ChannelState state;
 
-    public MeshyChannelHandler(Meshy meshy) {
+    public MeshyChannelHandler(Meshy meshy, Channel channel) {
         this.meshy = meshy;
+        this.state =  new ChannelState(meshy, channel);
+        log.trace("{} created for {}", state, channel);
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) {
         meshy.updateLastEventTime();
-        ctx.attr(STATE).get().channelRead(msg);
+        state.channelRead(msg);
         ReferenceCountUtil.release(msg);
     }
 
@@ -52,13 +53,13 @@ class MeshyChannelHandler extends ChannelInboundHandlerAdapter {
             throws Exception {
         meshy.updateLastEventTime();
         if (cause instanceof ClosedChannelException) {
-            log.warn("{} exception = {}", cause, ctx.attr(STATE).get());
+            log.warn("{} exception = {}", cause, state);
         } else if (cause instanceof ConnectException) {
             // it is expected for the thread who requested the connection to report an unexpected failure
-            log.debug("{} exception = {}", cause, ctx.attr(STATE).get());
+            log.debug("{} exception = {}", cause, state);
         } else {
             log.warn("Netty exception caught. Closing channel. ChannelState: {}",
-                    ctx.attr(STATE).get(), cause);
+                    state, cause);
             ctx.channel().close();
         }
         try {
@@ -70,18 +71,15 @@ class MeshyChannelHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) {
-        ChannelState newState = new ChannelState(meshy, ctx.channel());
-        ctx.attr(STATE).set(newState);
-        log.trace("{} created for {}", newState, ctx.hashCode());
         meshy.updateLastEventTime();
-        meshy.connectChannel(ctx.channel(), newState);
-        newState.channelRegistered();
+        meshy.connectChannel(ctx.channel(), state);
+        state.channelRegistered();
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         meshy.updateLastEventTime();
-        ctx.attr(STATE).get().channelClosed();
+        state.channelClosed();
         meshy.closeChannel(ctx.channel());
     }
 }
