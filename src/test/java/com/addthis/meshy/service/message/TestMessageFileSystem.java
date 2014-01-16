@@ -61,7 +61,7 @@ public class TestMessageFileSystem extends TestMesh {
         files.waitComplete();
         Map<String, FileReference> map = files.getFileMap();
 
-        log.info("files = " + map);
+        log.info("files = {}", map);
 
         assertTrue(map.containsKey("/rpc.test/one.rpc"));
 

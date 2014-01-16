@@ -27,6 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.ChannelState;
+
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 import com.yammer.metrics.core.Histogram;
@@ -155,12 +157,18 @@ public class SourceInputStream extends InputStream {
                         return false;
                     }
                 }
-                int newExpectingBytes = expectingBytes.getAndAdd(-data.length);
-                if (newExpectingBytes < refillThreshold) {
-                    synchronized (expectingBytes) {
-                        if (expectingBytes.get() < refillThreshold) {
-                            requestMoreData();
-                        }
+
+                int sizeIncludingOverhead = data.length + ChannelState.MESHY_BYTE_OVERHEAD
+                                            + StreamService.STREAM_BYTE_OVERHEAD;
+
+                // returns previous value
+                int oldExpectingBytes = expectingBytes.getAndAdd(-sizeIncludingOverhead);
+                // if prior to our update, we were above the threshold
+                if (oldExpectingBytes >= refillThreshold) {
+                    int updatedExpectingBytes = oldExpectingBytes - sizeIncludingOverhead;
+                    // and without respect to the current value, we know our update moved it below
+                    if (updatedExpectingBytes < refillThreshold) {
+                        requestMoreData();
                     }
                 }
                 if (log.isTraceEnabled()) {

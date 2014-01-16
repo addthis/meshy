@@ -40,12 +40,12 @@ public class TestMessageService extends TestMesh {
         final AtomicBoolean clientRecv = new AtomicBoolean(false);
         final AtomicBoolean serverRecv = new AtomicBoolean(false);
         /** connect client and set up listener */
-        MessageSource mss = new MessageSource(client, new TopicListener() {
+        TopicSender mss = new MessageSource(client, new TopicListener() {
             @Override
             public void receiveMessage(String topic, InputStream message) throws IOException {
-                log.info("client recv: " + topic);
-                assertEquals(topic, "def");
-                assertEquals(Bytes.readString(message), "67890");
+                log.info("client recv: {}", topic);
+                assertEquals("def", topic);
+                assertEquals("67890", Bytes.readString(message));
                 clientRecv.set(true);
             }
 
@@ -58,9 +58,9 @@ public class TestMessageService extends TestMesh {
         MessageTarget.registerListener("abc", new TargetListener() {
             @Override
             public void receiveMessage(TopicSender target, String topic, InputStream message) throws IOException {
-                log.info("server recv: " + topic);
-                assertEquals(topic, "abc");
-                assertEquals(Bytes.readString(message), "12345");
+                log.info("server recv: {}", topic);
+                assertEquals("abc", topic);
+                assertEquals("12345", Bytes.readString(message));
                 OutputStream out = target.sendMessage("def");
                 Bytes.writeString("67890", out);
                 out.close();
@@ -69,7 +69,7 @@ public class TestMessageService extends TestMesh {
 
             @Override
             public void linkDown(TopicSender target) {
-                log.info("server linkdown: " + target);
+                log.info("server linkdown: {}", target);
             }
         });
         /** ping test */

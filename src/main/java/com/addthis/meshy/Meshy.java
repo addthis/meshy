@@ -17,14 +17,19 @@ import java.io.ByteArrayInputStream;
 import java.io.Closeable;
 import java.io.InputStream;
 
+import java.net.ConnectException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -34,10 +39,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.nio.channels.ClosedChannelException;
 import java.text.DecimalFormat;
 
-import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Parameter;
-import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.service.file.FileSource;
 import com.addthis.meshy.service.file.FileTarget;
@@ -49,6 +52,8 @@ import com.addthis.meshy.service.peer.PeerSource;
 import com.addthis.meshy.service.peer.PeerTarget;
 import com.addthis.meshy.service.stream.StreamSource;
 import com.addthis.meshy.service.stream.StreamTarget;
+
+import com.google.common.base.Splitter;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
@@ -80,34 +85,26 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class Meshy implements ChannelMaster, Closeable {
 
-    private static final Logger log = LoggerFactory.getLogger(Meshy.class);
-    static final HashMap<Integer, Class<? extends SessionHandler>> idHandlerMap = new HashMap<>();
-    static final HashMap<Class<? extends SessionHandler>, Integer> handlerIdMap = new HashMap<>();
+    // system property constants
+    static final boolean THROTTLE_LOG = Parameter.boolValue("meshy.throttleLog", true);
+    static final int STATS_INTERVAL = Parameter.intValue("meshy.stats.time", 1) * 1000;
+
+    static final Map<Integer, Class<? extends SessionHandler>> idHandlerMap = new HashMap<>();
+    static final Map<Class<? extends SessionHandler>, Integer> handlerIdMap = new HashMap<>();
     static final AtomicInteger nextHandlerID = new AtomicInteger(1);
     static final DecimalFormat numbers = new DecimalFormat("#,###");
-    static final boolean throttleLog = Parameter.boolValue("meshy.throttleLog", true);
-    static final int statsInterval = Parameter.intValue("meshy.stats.time", 1) * 1000;
     static final VirtualMachineMetrics vmMetrics = VirtualMachineMetrics.getInstance();
     static final AtomicInteger nextSession = new AtomicInteger(0);
     static final Enumeration<NetworkInterface> netIfEnum;
+
+    // metrics and logging
+    private static final Logger log = LoggerFactory.getLogger(Meshy.class);
     private static final Meter bytesInMeter = Metrics.newMeter(Meshy.class, "bytesIn", "bytesIn", TimeUnit.SECONDS);
     private static final Meter bytesOutMeter = Metrics.newMeter(Meshy.class, "bytesOut", "bytesOut", TimeUnit.SECONDS);
 
-    private static String hostname;
+    private static final String HOSTNAME = getShortHostName();
 
-    static void registerHandlerClass(Class<? extends SessionHandler> clazz) {
-        if (!handlerIdMap.containsKey(clazz)) {
-            int id = nextHandlerID.getAndIncrement();
-            idHandlerMap.put(id, clazz);
-            handlerIdMap.put(clazz, id);
-        }
-        try {
-            hostname = Strings.splitArray(Bytes.toString(Bytes.readFully(Runtime.getRuntime().exec("hostname").getInputStream())), ".")[0];
-        } catch (Exception ex) {
-            // ignore
-        }
-    }
-
+    // static init block
     static {
         registerHandlerClass(HostSource.class);
         registerHandlerClass(HostTarget.class);
@@ -127,22 +124,23 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
     }
 
-    /**
-     * utility
-     */
-    public static byte[] getBytes(int length, ChannelBuffer buffer) {
-        byte request[] = new byte[length];
-        buffer.readBytes(request);
-        return request;
-    }
+    protected final HashSet<ChannelState> connectedChannels = new HashSet<>();
+    protected final HashSet<InetSocketAddress> needsPeering = new HashSet<>();
+    /* nodes actively being peered */
+    protected final HashSet<String> inPeering = new HashSet<>();
 
-    public static InputStream getInput(int length, ChannelBuffer buffer) {
-        return new ByteArrayInputStream(getBytes(length, buffer));
-    }
+    private final ChannelFactory clientFactory;
+    private final ClientBootstrap clientBootstrap;
+    private final String uuid;
+    private final AtomicLong lastEvent = new AtomicLong(0);
+    private final ChannelGroup allChannels = new DefaultChannelGroup();
+    private final AtomicInteger bytesIn = new AtomicInteger(0);
+    private final AtomicInteger bytesOut = new AtomicInteger(0);
+    private final Collection<ChannelCloseListener> channelCloseListeners = new ArrayList<>();
 
     protected Meshy() {
-        if (hostname != null) {
-            uuid = hostname + "-" + Long.toHexString(System.currentTimeMillis() & 0xffffff);
+        if (HOSTNAME != null) {
+            uuid = HOSTNAME + "-" + Long.toHexString(System.currentTimeMillis() & 0xffffff);
         } else {
             uuid = Long.toHexString(UUID.randomUUID().getMostSignificantBits());
         }
@@ -159,20 +157,44 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         updateLastEventTime();
     }
 
-    private final ChannelFactory clientFactory;
-    private final ClientBootstrap clientBootstrap;
+    protected void updateLastEventTime() {
+        lastEvent.set(JitterClock.globalTime());
+    }
 
-    private final String uuid;
-    private final AtomicLong lastEvent = new AtomicLong(0);
-    private final ChannelGroup allChannels = new DefaultChannelGroup();
-    private final AtomicInteger bytesIn = new AtomicInteger(0);
-    private final AtomicInteger bytesOut = new AtomicInteger(0);
-    private final Collection<ChannelCloseListener> channelCloseListeners = new ArrayList<>();
+    static void registerHandlerClass(Class<? extends SessionHandler> clazz) {
+        if (!handlerIdMap.containsKey(clazz)) {
+            int id = nextHandlerID.getAndIncrement();
+            idHandlerMap.put(id, clazz);
+            handlerIdMap.put(clazz, id);
+        }
+    }
 
-    protected final HashSet<ChannelState> connectedChannels = new HashSet<>();
-    /* nodes actively being peered */
-    protected final HashSet<String> inPeering = new HashSet<>();
-    protected final HashSet<InetSocketAddress> needsPeering = new HashSet<>();
+    public static InputStream getInput(int length, ChannelBuffer buffer) {
+        return new ByteArrayInputStream(getBytes(length, buffer));
+    }
+
+    /**
+     * utility
+     */
+    public static byte[] getBytes(int length, ChannelBuffer buffer) {
+        byte request[] = new byte[length];
+        buffer.readBytes(request);
+        return request;
+    }
+
+    private static String getShortHostName() {
+        try {
+            String hostName = Splitter.on('.')
+                    .split(InetAddress.getLocalHost().getHostName())
+                    .iterator().next();
+            log.debug("Local host name resolved to {}", hostName);
+            return hostName;
+        } catch (Exception ex) {
+            log.warn("Unable to resolve local host name");
+            log.debug("Local host name resolution stack trace", ex);
+            return null;
+        }
+    }
 
     @Override
     public void close() {
@@ -197,18 +219,6 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         return connectedChannels.size();
     }
 
-    @Override
-    public void sentBytes(int size) {
-        bytesOutMeter.mark(size);
-        bytesOut.addAndGet(size);
-    }
-
-    @Override
-    public void recvBytes(int size) {
-        bytesInMeter.mark(size);
-        bytesIn.addAndGet(size);
-    }
-
     protected int getAndClearSent() {
         return bytesOut.getAndSet(0);
     }
@@ -220,6 +230,51 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     @Override
     public String getUUID() {
         return uuid;
+    }
+
+    @Override
+    public TargetHandler createHandler(int type) {
+        try {
+            return (TargetHandler) idHandlerMap.get(type).newInstance();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /*
+     * gather connections related to the targetUuid requested
+     */
+    @Override
+    public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid) {
+        Set<Channel> group;
+        HashSet<String> uuids = new HashSet<>();
+        final boolean breakOnMatch = targetUuid != null && !targetUuid.isEmpty();
+        int sessionID = nextSession.incrementAndGet();
+        synchronized (connectedChannels) {
+            group = new HashSet<>(breakOnMatch ? 1 : connectedChannels.size());
+            for (ChannelState state : connectedChannels) {
+                if ((targetUuid == MeshyConstants.LINK_ALL) ||
+                    (targetUuid == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
+                    (state.getName() != null && targetUuid.equals(state.getName()))) {
+                    /* prevent dups if >1 connection to the same host */
+                    if (state.getName() != null && !uuids.add(state.getName())) {
+                        continue;
+                    }
+                    group.add(state.getChannel());
+                    /* add channel callback path to source */
+                    state.addSourceHandler(sessionID, sourceHandler);
+                    if (breakOnMatch) {
+                        break;
+                    }
+                }
+            }
+        }
+        group = Collections.synchronizedSet(group);
+        sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
+        log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
+                this, sourceHandler, targetHandler,
+                targetUuid != null ? "'" + targetUuid + "'" : null,
+                group, sessionID);
     }
 
     /**
@@ -240,16 +295,15 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     }
 
     @Override
-    public TargetHandler createHandler(int type) {
-        try {
-            return (TargetHandler) idHandlerMap.get(type).newInstance();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    public void sentBytes(int size) {
+        bytesOutMeter.mark(size);
+        bytesOut.addAndGet(size);
     }
 
-    protected void updateLastEventTime() {
-        lastEvent.set(JitterClock.globalTime());
+    @Override
+    public void recvBytes(int size) {
+        bytesInMeter.mark(size);
+        bytesIn.addAndGet(size);
     }
 
     @Override
@@ -262,7 +316,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         synchronized (connectedChannels) {
             connectedChannels.add(channelState);
         }
-        log.debug(this + " connectChannel @ " + channel.getRemoteAddress());
+        log.debug("{} connectChannel @ {}", this, channel.getRemoteAddress());
     }
 
     private void closeChannel(Channel channel) {
@@ -287,7 +341,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 }
             }
         }
-        log.debug(this + " closeChannel @ " + channel.getRemoteAddress());
+        log.debug("{} closeChannel @ {}", this, channel.getRemoteAddress());
     }
 
     public boolean addChannelCloseListener(ChannelCloseListener channelCloseListener) {
@@ -302,53 +356,34 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
     }
 
-    /*
-     * gather connections related to the targetUuid requested
-     */
-    @Override
-    public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid) {
-        ChannelGroup group = new DefaultChannelGroup();
-        HashSet<String> uuids = new HashSet<>();
-        boolean breakOnMatch = targetUuid != null && !targetUuid.isEmpty();
-        int sessionID = nextSession.incrementAndGet();
-        synchronized (connectedChannels) {
-            for (ChannelState state : connectedChannels) {
-                if (
-                        (targetUuid == MeshyConstants.LINK_ALL) ||
-                        (targetUuid == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
-                        (state.getName() != null && targetUuid.equals(state.getName()))
-                        ) {
-                    /* prevent dups if >1 connection to the same host */
-                    if (state.getName() != null && !uuids.add(state.getName())) {
-                        continue;
-                    }
-                    group.add(state.getChannel());
-                    /* add channel callback path to source */
-                    state.addSourceHandler(sessionID, sourceHandler);
-                    if (breakOnMatch) {
-                        break;
-                    }
-                }
-            }
-        }
-        sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
-        log.debug(this + " createSession " + sourceHandler + " target=" + targetHandler + " uuid=" + (targetUuid != null ? "'" + targetUuid + "'" : null) + " group=" + group + " sessionID=" + sessionID);
-    }
-
     /**
      * one channel handler is created per meshy instance (client or server)
      */
     class MeshyChannelHandler extends SimpleChannelHandler {
 
-        private ChannelState getAttachState(ChannelHandlerContext ctx) {
-            synchronized (ctx) {
-                ChannelState state = (ChannelState) ctx.getAttachment();
-                if (state == null) {
-                    state = new ChannelState(Meshy.this, ctx.getChannel());
-                    log.trace(state + " created for " + ctx.hashCode());
-                    ctx.setAttachment(state);
-                }
-                return state;
+        @Override
+        public void messageReceived(ChannelHandlerContext ctx, MessageEvent msg) {
+            updateLastEventTime();
+            getAttachState(ctx).messageReceived(msg);
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent ex) {
+            updateLastEventTime();
+            if (ex.getCause() instanceof ClosedChannelException) {
+                log.warn("{} exception = {}", ex, ctx.getAttachment());
+            } else if (ex.getCause() instanceof ConnectException) {
+                // it is expected for the thread who requested the connection to report an unexpected failure
+                log.debug("{} exception = {}", ex, ctx.getAttachment());
+            } else {
+                log.warn("Netty exception caught. Closing channel. ChannelState: {}",
+                        ctx.getAttachment(), ex.getCause());
+                ctx.getChannel().close();
+            }
+            try {
+                channelClosed(ctx, null);
+            } catch (Exception ee) {
+                log.error("Mystery exception we are swallowing", ee);
             }
         }
 
@@ -366,25 +401,16 @@ public abstract class Meshy implements ChannelMaster, Closeable {
             closeChannel(ctx.getChannel());
         }
 
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, ExceptionEvent ex) {
-            updateLastEventTime();
-            log.warn(ctx.getAttachment() + " exception = " + ex);
-            if (!(ex.getCause() instanceof ClosedChannelException)) {
-                log.warn("", ex.getCause());
-                ctx.getChannel().close();
+        private ChannelState getAttachState(ChannelHandlerContext ctx) {
+            synchronized (ctx) {
+                ChannelState state = (ChannelState) ctx.getAttachment();
+                if (state == null) {
+                    state = new ChannelState(Meshy.this, ctx.getChannel());
+                    log.trace("{} created for {}", state, ctx.hashCode());
+                    ctx.setAttachment(state);
+                }
+                return state;
             }
-            try {
-                channelClosed(ctx, null);
-            } catch (Exception ee) {
-                log.error("Mystery exception we are swallowing", ee);
-            }
-        }
-
-        @Override
-        public void messageReceived(ChannelHandlerContext ctx, MessageEvent msg) {
-            updateLastEventTime();
-            getAttachState(ctx).messageReceived(msg);
         }
     }
 }

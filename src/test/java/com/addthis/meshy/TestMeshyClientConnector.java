@@ -25,9 +25,9 @@ public class TestMeshyClientConnector extends TestMesh {
 
     @Test
     public void simple() throws Exception {
-        final AtomicReference<MeshyServer> server = new AtomicReference<MeshyServer>();
-        final LinkedList<String> sequence = new LinkedList<String>();
-        final LinkedList<String> observed = new LinkedList<String>();
+        final AtomicReference<MeshyServer> server = new AtomicReference<>();
+        final LinkedList<String> sequence = new LinkedList<>();
+        final LinkedList<String> observed = new LinkedList<>();
         server.set(getServer());
         sequence.add("up-" + server.get().getUUID());
         MeshyClientConnector connector = new MeshyClientConnector("localhost", server.get().getLocalPort(), 500, 1000) {
@@ -41,6 +41,7 @@ public class TestMeshyClientConnector extends TestMesh {
                 observed.add("down-" + server.get().getUUID());
             }
         };
+        try {
         Thread.sleep(1000);
         server.get().close();
         sequence.add("down-" + server.get().getUUID());
@@ -50,8 +51,11 @@ public class TestMeshyClientConnector extends TestMesh {
         server.get().close();
         sequence.add("down-" + server.get().getUUID());
         Thread.sleep(1000);
-        log.info("seq:" + sequence);
-        log.info("obs:" + observed);
+        log.info("seq:{}", sequence);
+        log.info("obs:{}", observed);
         assertEquals(sequence.toString(), observed.toString());
+        } finally {
+            connector.terminate();
+        }
     }
 }

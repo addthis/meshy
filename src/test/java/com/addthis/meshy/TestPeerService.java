@@ -34,10 +34,10 @@ public class TestPeerService extends TestMesh {
         MeshyServer server2 = getServer();
         server1.connectPeer(new InetSocketAddress("localhost", server2.getLocalPort()));
         waitQuiescent();
-        assertTrue(server1.getPeeredCount() == 1);
-        assertTrue(server2.getPeeredCount() == 1);
-        assertTrue(server1.getChannelCount() == 1);
-        assertTrue(server2.getChannelCount() == 1);
+        assertEquals(1, server1.getPeeredCount());
+        assertEquals(1, server2.getPeeredCount());
+        assertEquals(1, server1.getChannelCount());
+        assertEquals(1, server2.getChannelCount());
     }
 
     @Test
@@ -56,12 +56,12 @@ public class TestPeerService extends TestMesh {
         HostSource hosts = new HostSource(client);
         hosts.sendRequest();
         hosts.waitComplete();
-        log.info("host list.1 --> " + hosts.getHostList());
+        log.info("host list.1 --> {}", hosts.getHostList());
         Map<String, InetSocketAddress> hostMap = hosts.getHostMap();
         assertTrue(hostMap.containsKey(server2.getUUID()));
         assertTrue(hostMap.containsKey(server3.getUUID()));
-        assertTrue(hostMap.get(server2.getUUID()).getPort() == server2.getLocalPort());
-        assertTrue(hostMap.get(server3.getUUID()).getPort() == server3.getLocalPort());
+        assertEquals(hostMap.get(server2.getUUID()).getPort(), server2.getLocalPort());
+        assertEquals(hostMap.get(server3.getUUID()).getPort(), server3.getLocalPort());
         client.close();
 
         // have one server drop out
@@ -75,18 +75,18 @@ public class TestPeerService extends TestMesh {
         hosts = new HostSource(client);
         hosts.sendRequest();
         hosts.waitComplete();
-        log.info("host list.2 --> " + hosts.getHostList());
+        log.info("host list.2 --> {}", hosts.getHostList());
         hostMap = hosts.getHostMap();
         assertTrue(!hostMap.containsKey(server2.getUUID()));
         assertTrue(hostMap.containsKey(server3.getUUID()));
-        assertTrue(hostMap.get(server3.getUUID()).getPort() == server3.getLocalPort());
+        assertEquals(hostMap.get(server3.getUUID()).getPort(), server3.getLocalPort());
     }
 
     @Test
     public void manyPeers() throws Exception {
         final int serverPort = nextPort.incrementAndGet();
         final int serverCount = 20;
-        LinkedList<MeshyServer> servers = new LinkedList<MeshyServer>();
+        LinkedList<MeshyServer> servers = new LinkedList<>();
         for (int i = 0; i < serverCount; i++) {
             servers.add(getServer(nextPort.getAndIncrement()));
         }
@@ -99,11 +99,10 @@ public class TestPeerService extends TestMesh {
         waitQuiescent();
 
         for (Meshy server : servers) {
-            log.info("check connection count >> " + server);
+            log.info("check connection count >> {}", server);
         }
         for (int i = 0; i < serverCount; i++) {
-            Meshy client = getClient(serverPort + i);
-            try {
+            try (Meshy client = getClient(serverPort + i)) {
                 HostSource hosts = new HostSource(client);
                 hosts.sendRequest();
                 hosts.waitComplete();
@@ -113,12 +112,10 @@ public class TestPeerService extends TestMesh {
                         continue;
                     }
                     if (!hostMap.containsKey(server.getUUID())) {
-                        log.info((serverPort + 1) + " missing server --> " + server);
+                        log.info("{} missing server --> {}", serverPort + 1, server);
                     }
                     assertTrue(hostMap.containsKey(server.getUUID()));
                 }
-            } finally {
-                client.close();
             }
         }
     }

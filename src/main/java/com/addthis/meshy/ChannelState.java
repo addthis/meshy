@@ -20,6 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.addthis.basis.util.Parameter;
 
+import com.google.common.base.Objects;
+
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
@@ -42,6 +44,8 @@ public class ChannelState extends SimpleChannelHandler {
 
     protected static final BufferAllocator bufferFactory = new BufferAllocator();
 
+    public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
+
     protected static enum READMODE {
         ReadType, ReadSession, ReadLength, ReadData
     }
@@ -57,7 +61,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public static ChannelBuffer allocateSendBuffer(int type, int session, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(4 + 4 + 4 + length);
+        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -65,7 +69,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public static ChannelBuffer allocateSendBuffer(int type, int session, ChannelBuffer from, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(4 + 4 + 4 + length);
+        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -97,18 +101,32 @@ public class ChannelState extends SimpleChannelHandler {
         this.channel = channel;
     }
 
+    protected Objects.ToStringHelper toStringHelper() {
+        return Objects.toStringHelper(this)
+                .add("targets", targetHandlers.size())
+                .add("sources", sourceHandlers.size())
+                .add("name", name)
+                .add("remoteAddress", remoteAddress)
+                .add("mode", mode)
+                .add("type", type)
+                .add("session", session)
+                .add("length", length)
+                .add("channel", channel)
+                .add("master", master.getUUID());
+    }
+
     @Override
     public String toString() {
-        return master + "[CS#" + hashCode() + ":n=" + getName() + ",r=" + remoteAddress + ",c=" + (channel != null ? channel.getRemoteAddress() : "null") + ",t=" + targetHandlers.size() + ",s=" + sourceHandlers.size() + "]";
+        return toStringHelper().toString();
     }
 
     /* helper to debug close() with open sessions/targets */
     protected void debugSessions() {
         if (!targetHandlers.isEmpty()) {
-            log.info(this + " targets --> " + targetHandlers);
+            log.info("{} targets --> {}", this, targetHandlers);
         }
         if (!sourceHandlers.isEmpty()) {
-            log.info(this + " sources --> " + sourceHandlers);
+            log.info("{} sources --> {}", this, sourceHandlers);
         }
     }
 

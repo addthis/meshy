@@ -16,6 +16,8 @@ package com.addthis.meshy;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.google.common.base.Objects;
+
 import org.jboss.netty.buffer.ChannelBuffer;
 
 import org.slf4j.Logger;
@@ -50,9 +52,19 @@ public abstract class TargetHandler implements SessionHandler {
         this.session = session;
     }
 
+    protected Objects.ToStringHelper toStringHelper() {
+        return Objects.toStringHelper(this)
+                .add("shortName", shortName)
+                .add("channelState", channelState.getName())
+                .add("session", session)
+                .add("complete", complete)
+                .add("waited", waited)
+                .add("gate-permits", gate.availablePermits());
+    }
+
     @Override
     public String toString() {
-        return channelState + "[FileTarget:" + shortName + ",s=" + session + "]";
+        return toStringHelper().toString();
     }
 
     public ChannelState getChannelState() {

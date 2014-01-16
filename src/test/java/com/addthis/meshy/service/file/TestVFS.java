@@ -19,8 +19,6 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
-import com.addthis.basis.util.Strings;
-
 import com.addthis.meshy.LocalFileHandler;
 import com.addthis.meshy.LocalFileSystem;
 import com.addthis.meshy.MeshyClient;
@@ -39,16 +37,14 @@ public class TestVFS extends TestMesh {
 
     @Before
     public void setup() {
-        System.setProperty("mesh.local.handlers", Strings.join(new String[]{
-                TestVFS.DummyHandler.class.getName(),          // for running in IntelliJ
-                TestVFS.DummyHandler.class.getCanonicalName()  // for running from cmd-line & maven
-        }, ","));
+        System.setProperty("mesh.local.handlers", DummyHandler.class.getName());
         LocalFileSystem.reloadHandlers();
         MeshyServer.resetFileSystems();
     }
 
-    @After
+    @After @Override
     public void cleanup() {
+        super.cleanup();
         System.setProperty("mesh.local.handlers", "");
         LocalFileSystem.reloadHandlers();
         MeshyServer.resetFileSystems();
@@ -61,17 +57,16 @@ public class TestVFS extends TestMesh {
         FileSource files = new FileSource(client, new String[]{"*"});
         files.waitComplete();
         Map<String, FileReference> map = files.getFileMap();
-        System.out.println("map=" + map);
+        log.info("map={}", map);
         checkFile(map, new FileReference("/dummy", 0, 0).setHostUUID(server.getUUID()));
     }
 
-    /** */
     public static class DummyHandler implements LocalFileHandler {
 
-        LinkedList<VirtualFileReference> list = new LinkedList<VirtualFileReference>();
+        LinkedList<VirtualFileReference> list = new LinkedList<>();
         VirtualFileReference ref = new DummyReference();
 
-        {
+        public DummyHandler() {
             list.add(ref);
         }
 

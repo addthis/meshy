@@ -23,6 +23,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -57,7 +58,6 @@ import com.yammer.metrics.core.Timer;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.group.ChannelGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -184,7 +184,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                     }
 
                     @Override
-                    public void init(int session, int targetHandler, ChannelGroup group) {
+                    public void init(int session, int targetHandler, Set<Channel> group) {
                         if (forwardMetaData) {
                             //directly get size from group since channels is not set yet;
                             int peerCount = group.size();

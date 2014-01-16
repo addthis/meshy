@@ -23,6 +23,7 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelMaster;
+import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.SourceHandler;
@@ -138,6 +139,7 @@ public class StreamSource extends SourceHandler {
             case StreamService.MODE_MORE:
                 byte data[] = Bytes.readBytes(in, in.available());
                 recvBytes += data.length;
+                recvBytes += ChannelState.MESHY_BYTE_OVERHEAD + StreamService.STREAM_BYTE_OVERHEAD;
                 stream.feed(data);
                 break;
             case StreamService.MODE_CLOSE:
