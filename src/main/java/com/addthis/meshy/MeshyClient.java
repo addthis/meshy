@@ -189,7 +189,7 @@ public class MeshyClient extends Meshy {
         /**
          * Called when all reference have been completed.  This can
          * be used to determine when the communication interaction to
-         * the mesh source has completed, allowing clients to fail
+         * the meshy source has completed, allowing clients to fail
          * quickly when no references are found.
          */
         public void receiveReferenceComplete();

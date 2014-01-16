@@ -41,7 +41,7 @@ public class TestMessageFileSystem extends TestMesh {
         final MeshyClient client = getClient(server);
 
         /*
-         * client registers rpc endpoint in mesh filespace: /rpc.test/one.rpc
+         * client registers rpc endpoint in meshy filespace: /rpc.test/one.rpc
          */
         MessageFileProvider provider = new MessageFileProvider(client);
         provider.setListener("/rpc.test/one.rpc", new MessageListener() {

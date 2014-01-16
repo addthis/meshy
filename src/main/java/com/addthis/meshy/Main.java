@@ -51,8 +51,12 @@ public final class Main {
             try (Meshy more = new MeshyClient(args[1], Integer.parseInt(args[2]))) {
                 if (args.length > 3) {
                     String cmd = args[3];
-                    if (cmd.equals("ls") && args.length > 4) {
-                        FileSource fileSource = new FileSource(more, new String[]{args[4]});
+                    if (cmd.equals("ls")) {
+	                    String expr = args.length > 4 ? args[4] : "/*";
+	                    if (expr.endsWith("/")) {
+		                    expr += "*";
+	                    }
+                        FileSource fileSource = new FileSource(more, new String[]{expr});
                         fileSource.waitComplete();
                         for (FileReference file : fileSource.getFileList()) {
                             System.out.println(file.getHostUUID() + " " + file.name + " \t " + file.size + " \t " + new Date(file.lastModified));

@@ -60,7 +60,7 @@ public class FileSource extends SourceHandler {
     }
 
     /**
-     * used for internal proxy through mesh
+     * used for internal proxy through meshy
      */
     public FileSource(ChannelMaster master, String targetUuid, String files[]) {
         super(master, FileTarget.class, targetUuid);

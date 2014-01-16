@@ -42,7 +42,7 @@ public class StreamService {
 
     /* secret byte handshake */
     static final byte[] FAIL_BYTES = new byte[0];
-    /* bigger buffers = better performance, chance of OOMing a heavily loaded/peered mesh node */
+    /* bigger buffers = better performance, chance of OOMing a heavily loaded/peered meshy node */
     /* pre-fetch stream on open */
     static final boolean DIRECT_COPY = Parameter.boolValue("meshy.copy.direct", true);
     /* log dropped "more" requests */
