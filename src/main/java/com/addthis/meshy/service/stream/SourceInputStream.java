@@ -50,7 +50,8 @@ public class SourceInputStream extends InputStream {
     /* max time to wait in seconds for a read response before timing out and closing stream */
     private static final int MAX_READ_WAIT = Parameter.intValue("meshy.stream.timeout", 0) * 1000;
 
-    private final Logger log = StreamService.log;
+    private static final Logger log = StreamService.log;
+
     private final AtomicInteger expectingBytes = new AtomicInteger(0);
     private final LinkedBlockingDeque<byte[]> deque = new LinkedBlockingDeque<>();
     private final StreamSource source;
@@ -95,7 +96,7 @@ public class SourceInputStream extends InputStream {
     void feed(byte data[]) {
         try {
             if (log.isTraceEnabled()) {
-                log.trace(this + " feed=" + data.length);
+                log.trace("{} feed={}", this, data.length);
             }
             basHisto.update(data.length);
             deque.put(data);
@@ -128,7 +129,7 @@ public class SourceInputStream extends InputStream {
         }
         if ((blocking && (current == null || current.available() == 0)) || (!blocking && currentData == null)) {
             if (log.isTraceEnabled()) {
-                log.trace(this + " fill c=" + (current != null ? current.available() : "empty"));
+                log.trace("{} fill c={}", this, current != null ? current.available() : "empty");
             }
             byte data[] = null;
             try {
@@ -138,7 +139,7 @@ public class SourceInputStream extends InputStream {
                 }
                 if (blocking) {
                     if (log.isTraceEnabled()) {
-                        log.trace(this + " fill from finderQueue=" + deque.size() + " wait=" + MAX_READ_WAIT);
+                        log.trace("{} fill from finderQueue={} wait={}", this, deque.size(), MAX_READ_WAIT);
                     }
                     long startTime = System.nanoTime();
                     data = MAX_READ_WAIT > 0 ? deque.poll(MAX_READ_WAIT, TimeUnit.MILLISECONDS) : deque.take();
@@ -171,16 +172,14 @@ public class SourceInputStream extends InputStream {
                         requestMoreData();
                     }
                 }
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " fill take=" + data.length);
-                }
+                log.trace("{} fill take={}", this, data.length);
             } catch (InterruptedException ex) {
-                log.warn(this + " close on stream service interrupted");
+                log.warn("{} close on stream service interrupted", this);
                 close();
                 /* important that we throw InterruptedIOException so that SourceTracker does not mark this file "dead" */
-                throw new InterruptedIOException();
+                throw new InterruptedIOException("stream interrupted");
             } catch (Exception ex) {
-                log.warn(this + " close on error " + ex);
+                log.warn("{} close on error", this, ex);
                 close();
                 throw new IOException(ex);
             }
@@ -195,17 +194,15 @@ public class SourceInputStream extends InputStream {
                 }
                 throw new IOException(errorMessage);
             } else if (data.length == 0) {
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " fill exit on 0 bytes");
-                }
+                log.trace("{} fill exit on 0 bytes", this);
                 currentData = data;
                 done = true;
                 return false;
             }
-            if (!blocking) {
-                currentData = data;
-            } else {
+            if (blocking) {
                 current = new ByteArrayInputStream(data);
+            } else {
+                currentData = data;
             }
             return true;
         }
@@ -246,10 +243,10 @@ public class SourceInputStream extends InputStream {
 
     @Override
     public int read() throws IOException {
-        if (!fill(true)) {
-            return -1;
-        } else {
+        if (fill(true)) {
             return current.read();
+        } else {
+            return -1;
         }
     }
 
@@ -260,10 +257,10 @@ public class SourceInputStream extends InputStream {
 
     @Override
     public int read(byte buf[], int off, int len) throws IOException {
-        if (!fill(true)) {
-            return -1;
-        } else {
+        if (fill(true)) {
             return current.read(buf, off, len);
+        } else {
+            return -1;
         }
     }
 
