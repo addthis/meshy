@@ -153,7 +153,7 @@ public class ChannelState extends SimpleChannelHandler {
                  * example is StreamService when EOF framing tells the
                  * client we're done before sendComplete() framing does.
                  */
-                log.info(this + " writing [" + reportBytes + "] to dead channel");
+                log.info("{} writing [{}] to dead channel", this, reportBytes);
                 if (watcher != null) {
                     /**
                      * for accounting, rate limiting reasons, we have to report these as sent.
@@ -171,7 +171,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public void setName(String name) {
-        log.debug(this + " setName=" + name);
+        log.debug("{} setName={}", this, name);
         this.name = name;
     }
 
@@ -198,7 +198,7 @@ public class ChannelState extends SimpleChannelHandler {
     public void addSourceHandler(int sessionID, SourceHandler handler) {
         sourceHandlers.put(sessionID, handler);
         if (sourceHandlers.size() >= excessiveSources) {
-            log.debug("excessive sources reached: " + sourceHandlers.size());
+            log.debug("excessive sources reached: {}", sourceHandlers.size());
             if (log.isTraceEnabled()) {
                 debugSessions();
             }
@@ -208,16 +208,16 @@ public class ChannelState extends SimpleChannelHandler {
     public void removeHandlerOnComplete(TargetHandler targetHandler) {
         /* ensure target session closure */
         if (targetHandlers.remove(targetHandler.getSessionId()) != null) {
-            log.debug("handler lingering on complete: " + targetHandler);
+            log.debug("handler lingering on complete: {}", targetHandler);
         }
     }
 
     public void channelConnected(ChannelStateEvent e) {
-        log.debug(this + " channel:connect [" + this.hashCode() + "] " + e);
+        log.debug("{} channel:connect [{}] {}", this, this.hashCode(), e);
     }
 
     public void channelClosed(ChannelStateEvent e) throws Exception {
-        log.debug(this + " channel:close [" + this.hashCode() + "] " + e);
+        log.debug("{} channel:close [{}] {}", this, this.hashCode(), e);
         for (Map.Entry<Integer, SessionHandler> entry : targetHandlers.entrySet()) {
             entry.getValue().receiveComplete(this, entry.getKey());
         }
@@ -227,9 +227,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public void messageReceived(MessageEvent msg) {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv msg=" + msg);
-        }
+        log.trace("{} recv msg={}", this, msg);
         final ChannelBuffer in = (ChannelBuffer) msg.getMessage();
         master.recvBytes(in.readableBytes());
         if (buffer.writableBytes() >= in.readableBytes()) {
@@ -240,9 +238,7 @@ public class ChannelState extends SimpleChannelHandler {
             out.writeBytes(in);
             returnSendBuffer(buffer);
             buffer = out;
-            if (log.isDebugEnabled()) {
-                log.debug(this + " recv.reallocate: " + out.writableBytes());
-            }
+            log.debug("{} recv.reallocate: {}", this, out.writableBytes());
         }
         loop:
         while (true) {
@@ -280,17 +276,15 @@ public class ChannelState extends SimpleChannelHandler {
                         handler = sourceHandlers.get(session);
                     } else {
                         handler = targetHandlers.get(session);
-                        if (handler == null && master instanceof MeshyServer) {
+                        if ((handler == null) && (master instanceof MeshyServer)) {
                             handler = master.createHandler(type);
                             ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
-                            if (log.isDebugEnabled()) {
-                                log.debug(this + " createHandler " + handler + " session=" + session);
-                            }
+                            log.debug("{} createHandler {} session={}", this, handler, session);
                             if (targetHandlers.put(session, handler) != null) {
-                                log.debug("clobbered session " + session + " with " + handler);
+                                log.debug("clobbered session {} with {}", session, handler);
                             }
                             if (targetHandlers.size() >= excessiveTargets) {
-                                log.debug("excessive targets reached, current targetHandlers = " + targetHandlers.size());
+                                log.debug("excessive targets reached, current targetHandlers = {}", targetHandlers.size());
                                 if (log.isTraceEnabled()) {
                                     debugSessions();
                                 }
@@ -303,9 +297,7 @@ public class ChannelState extends SimpleChannelHandler {
                                 handler.receiveComplete(this, session);
                                 if (type == MeshyConstants.KEY_RESPONSE) {
                                     sourceHandlers.remove(session);
-                                    if (log.isDebugEnabled()) {
-                                        log.debug(this + " dropSession session=" + session);
-                                    }
+                                    log.debug("{} dropSession session={}", this, session);
                                 } else {
                                     targetHandlers.remove(session);
                                 }
@@ -319,7 +311,8 @@ public class ChannelState extends SimpleChannelHandler {
                     int read = readable - buffer.readableBytes();
                     if (read < length) {
                         if (handler != null || log.isDebugEnabled()) {
-                            log.debug(this + " recv type=" + type + " handler=" + handler + " ssn=" + session + " did not consume all bytes (read=" + read + " of " + length + ")");
+                            log.debug("{} recv type={} handler={} ssn={} did not consume all bytes (read={} of {})",
+                                    this, type, handler, session, read, length);
                         }
                         buffer.skipBytes(length - read);
                     }
