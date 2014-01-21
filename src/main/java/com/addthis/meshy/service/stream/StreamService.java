@@ -18,6 +18,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.MeshyConstants;
+
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 import com.yammer.metrics.core.Meter;
@@ -47,7 +49,7 @@ public class StreamService {
     static final int MODE_FAIL = 2;
     static final int MODE_CLOSE = 3;
     static final int MODE_START_2 = 4; // passing options
-    static final byte[] CLOSE_BYTES = new byte[0]; // not used for reference comparison -- only length
+    static final byte[] CLOSE_BYTES = MeshyConstants.EMPTY_BYTES; // not used for reference comparison -- only length
     static final byte[] FAIL_BYTES = new byte[0]; // used in same-vm reference pointer comparison
 
     // metrics -- some are also used in functional logic
