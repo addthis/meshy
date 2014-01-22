@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -110,6 +111,7 @@ public class FileTarget extends TargetHandler implements Runnable {
     private final AtomicBoolean firstDone = new AtomicBoolean(false);
     private final LinkedList<String> paths = new LinkedList<>();
     private boolean canceled = false;
+    private boolean forwardMetaData = false;
     private Future<?> findTask = null;
     private VFSDirCache cache;
     private String scope = null;
@@ -180,7 +182,6 @@ public class FileTarget extends TargetHandler implements Runnable {
      */
     public void doFind() throws IOException {
         FileSource fileSource = null;
-        boolean forwardMetaData= false;
         findsRunning.inc();
         try {
             //should we ask other meshy nodes for file references as well?
@@ -189,7 +190,8 @@ public class FileTarget extends TargetHandler implements Runnable {
             if (remote) { //yes, ask other meshy nodes (and ourselves)
                 forwardMetaData = "localF".equals(scope);
                 try {
-                    fileSource = new ForwardingFileSource(forwardMetaData);
+                    fileSource = new ForwardingFileSource(getChannelMaster(), MeshyConstants.LINK_NAMED,
+                            paths.toArray(new String[paths.size()]));
                 } catch (ChannelException ignored) {
                     // can happen when there are no remote hosts
                 }
@@ -386,6 +388,27 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
     }
 
+    private void forwardPeerList(Collection<Channel> peerList) {
+        int peerCount = peerList.size();
+        FileReference flagRef = new FileReference("peers", 0, peerCount);
+        send(flagRef.encode(FileTarget.peersToString(peerList)));
+    }
+
+    private static String peersToString(Iterable<Channel> peers) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (Channel peer : peers) {
+                if (sb.length() > 0) {
+                    sb.append(',');
+                }
+                sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return e.getMessage();
+        }
+    }
+
     private static final class VFSPath {
 
         final Deque<String> path = new LinkedList<>();
@@ -454,13 +477,10 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     private class ForwardingFileSource extends FileSource {
 
-        private final boolean forwardMetaData;
         private final AtomicBoolean doComplete = new AtomicBoolean();
 
-        public ForwardingFileSource(boolean forwardMetaData) {
-            super(FileTarget.this.getChannelMaster(), MeshyConstants.LINK_NAMED,
-                    FileTarget.this.paths.toArray(new String[FileTarget.this.paths.size()]));
-            this.forwardMetaData = forwardMetaData;
+        public ForwardingFileSource(ChannelMaster master, String nameFilter, String[] files) {
+            super(master, nameFilter, files);
         }
 
         @Override
@@ -498,27 +518,6 @@ public class FileTarget extends TargetHandler implements Runnable {
         @Override
         public void receiveComplete() throws Exception {
             doComplete.set(true);
-        }
-
-        private void forwardPeerList(Collection<Channel> peerList) {
-            int peerCount = peerList.size();
-            FileReference flagRef = new FileReference("peers", 0, peerCount);
-            FileTarget.this.send(flagRef.encode(peersToString(peerList)));
-        }
-
-        private String peersToString(Iterable<Channel> peers) {
-            try {
-                StringBuilder sb = new StringBuilder();
-                for (Channel peer : peers) {
-                    if (sb.length() > 0) {
-                        sb.append(',');
-                    }
-                    sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
-                }
-                return sb.toString();
-            } catch (Exception e) {
-                return e.getMessage();
-            }
         }
     }
 }
