@@ -187,11 +187,7 @@ public class SourceInputStream extends InputStream {
                 close();
                 byte[] error = deque.poll();
                 String errorMessage;
-                if (error == null) {
-                    errorMessage = "no failure message available.";
-                } else {
-                    errorMessage = Bytes.toString(error);
-                }
+                errorMessage = error == null ? "no failure message available." : Bytes.toString(error);
                 throw new IOException(errorMessage);
             } else if (data.length == 0) {
                 log.trace("{} fill exit on 0 bytes", this);

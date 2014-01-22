@@ -18,15 +18,15 @@ import org.jboss.netty.buffer.ChannelBuffer;
 
 public interface SessionHandler {
 
-    public boolean send(byte data[], SendWatcher watcher);
+    boolean send(byte data[], SendWatcher watcher);
 
-    public boolean sendComplete();
+    boolean sendComplete();
 
-    public void receive(ChannelState state, int session, int length, ChannelBuffer buffer) throws Exception;
+    void receive(ChannelState state, int session, int length, ChannelBuffer buffer) throws Exception;
 
-    public void receiveComplete(ChannelState state, int session) throws Exception;
+    void receiveComplete(ChannelState state, int session) throws Exception;
 
-    public void receiveComplete(int session) throws Exception;
+    void receiveComplete(int session) throws Exception;
 
-    public void waitComplete();
+    void waitComplete();
 }

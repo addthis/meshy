@@ -25,6 +25,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -58,6 +59,7 @@ import com.yammer.metrics.core.Timer;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.channel.ChannelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +72,6 @@ public class FileTarget extends TargetHandler implements Runnable {
     static final int maxCacheTokens = Parameter.intValue("meshy.file.dirCacheTokens", 500);
     static final int finderWarnTime = Parameter.intValue("meshy.finder.warnTime", 10000);
     static final int debugCacheLine = Parameter.intValue("meshy.finder.debug.cacheLine", 5000);
-
 
     static final Meter cacheHitsMeter = Metrics.newMeter(FileTarget.class, "dirCacheHits", "dirCacheHits", TimeUnit.SECONDS);
     static final AtomicInteger cacheHits = new AtomicInteger(0);
@@ -103,7 +104,12 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     protected static final HashMap<ChannelMaster, VFSDirCache> cacheByMaster = new HashMap<>(1);
 
+    private final long markTime = System.currentTimeMillis();
+
+    private final AtomicBoolean firstDone = new AtomicBoolean(false);
     private final LinkedList<String> paths = new LinkedList<>();
+    private boolean canceled = false;
+    private Future<?> findTask = null;
     private VFSDirCache cache;
     private String scope = null;
 
@@ -122,9 +128,7 @@ public class FileTarget extends TargetHandler implements Runnable {
     @Override
     public void receive(int length, ChannelBuffer buffer) throws Exception {
         final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv scope=" + scope + " msg=" + msg);
-        }
+        log.trace("{} recv scope={} msg={}", this, scope, msg);
         if (scope == null) {
             scope = msg;
         } else {
@@ -132,19 +136,29 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
     }
 
-    private AtomicBoolean firstDone = new AtomicBoolean(false);
-    private long markTime = System.currentTimeMillis();
-
     @Override
     public void receiveComplete() throws IOException {
         try {
-            finderPool.execute(this);
-        } catch (RejectedExecutionException e) {
-            log.warn("dropping find @ queue=" + finderQueue.size() + " paths=" + paths);
+            if (!canceled) {
+                findTask = finderPool.submit(this);
+            } else {
+                log.debug("skipping execution of canceled file find");
+            }
+        } catch (RejectedExecutionException ignored) {
+            log.warn("dropping find @ queue={} paths={}", finderQueue.size(), paths);
             dropFind();
         } catch (Exception ex) {
             log.warn("FileTarget:receiveComplete() eror", ex);
         }
+    }
+
+    @Override
+    public void channelClosed() {
+        // TODO : more robust cancelation support. eg. cancel remotes as in stream service
+        if (findTask != null) {
+            findTask.cancel(false); // interrupting in some of those places would be bad
+        }
+        canceled = true;
     }
 
     private void dropFind() {
@@ -165,74 +179,19 @@ public class FileTarget extends TargetHandler implements Runnable {
      */
     public void doFind() throws IOException {
         FileSource fileSource = null;
-        boolean forwardMetaDataOuter = false;
+        boolean forwardMetaData= false;
+        findsRunning.inc();
         try {
-            findsRunning.inc();
             //should we ask other meshy nodes for file references as well?
             final boolean remote = scope.startsWith("local");
-            if (log.isDebugEnabled()) {
-                log.debug(this + " starting-find=" + scope);
-            }
+            log.debug("{} starting-find={}", this, scope);
             if (remote) { //yes, ask other meshy nodes (and ourselves)
-                final boolean forwardMetaData = "localF".equals(scope);
-                final AtomicBoolean doComplete = new AtomicBoolean();
-                forwardMetaDataOuter = forwardMetaData;
-                fileSource = new FileSource(getChannelMaster(), MeshyConstants.LINK_NAMED, paths.toArray(new String[paths.size()])) {
-                    @Override
-                    public void receive(int length, ChannelBuffer buffer) throws Exception {
-                        FileTarget.this.send(Meshy.getBytes(length, buffer));
-                    }
-
-                    @Override
-                    public void init(int session, int targetHandler, Set<Channel> group) {
-                        if (forwardMetaData) {
-                            //directly get size from group since channels is not set yet;
-                            int peerCount = group.size();
-                            FileReference flagRef = new FileReference("peers", 0, peerCount);
-                            FileTarget.this.send(flagRef.encode(peersToString(group)));
-                        }
-                        super.init(session, targetHandler, group);
-                    }
-
-                    // called per individual remote mesh node response complete
-                    @Override
-                    public void receiveComplete(ChannelState state, int completedSession) throws Exception {
-                        super.receiveComplete(state, completedSession);
-                        if (forwardMetaData) {
-                            int peerCount = getPeerCount();
-                            FileReference flagRef = new FileReference("response", 0, peerCount);
-                            FileTarget.this.send(flagRef.encode(state.getChannelRemoteAddress().getHostName()));
-                        }
-                        if (doComplete.compareAndSet(true, false)) {
-                            if (!firstDone.compareAndSet(false, true)) {
-                                findTime.addAndGet(System.currentTimeMillis() - markTime);
-                                findsRunning.dec();
-                                FileTarget.this.sendComplete();
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void receiveComplete() throws Exception {
-                        doComplete.set(true);
-                    }
-
-                    private String peersToString(Iterable<Channel> peers) {
-                        try {
-                            StringBuilder sb = new StringBuilder();
-                            for (Channel peer : peers) {
-                                if (sb.length() > 0) {
-                                    sb.append(',');
-                                }
-                                sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
-                            }
-                            return sb.toString();
-                        } catch (Exception e) {
-                            return e.getMessage();
-                        }
-                    }
-
-                };
+                forwardMetaData = "localF".equals(scope);
+                try {
+                    fileSource = new ForwardingFileSource(forwardMetaData);
+                } catch (ChannelException ignored) {
+                    // can happen when there are no remote hosts
+                }
             } //else -- just look ourselves
 
             //Local filesystem find. Done in both cases.
@@ -241,21 +200,19 @@ public class FileTarget extends TargetHandler implements Runnable {
             for (String onepath : paths) {
                 for (VirtualFileSystem vfs : getChannelMaster().getFileSystems()) {
                     VFSPath path = new VFSPath(vfs.tokenizePath(onepath));
-                    if (log.isTraceEnabled()) {
-                        log.trace(this + " recv.walk vfs=" + vfs + " path=" + path);
-                    }
+                    log.trace("{} recv.walk vfs={} path={}", this, vfs, path);
                     walkSafe(walkState, Long.toString(vfs.hashCode()), vfs.getFileRoot(), path);
                 }
             }
             long localRunTime = System.currentTimeMillis() - localStart;
             if (localRunTime > finderWarnTime) {
-                log.warn(this + " slow find (" + localRunTime + ") for " + paths);
+                log.warn("{} slow find ({}) for {}", this, localRunTime, paths);
             }
             finds.incrementAndGet();
             findTimeLocal.addAndGet(localRunTime);
             localFindTimer.update(localRunTime, TimeUnit.MILLISECONDS);
         } finally {
-            if (forwardMetaDataOuter) {
+            if (forwardMetaData) {
                 FileReference flagRef = new FileReference("localfind", 0, 0);
                 FileTarget.this.send(flagRef.encode(null));
             }
@@ -288,7 +245,7 @@ public class FileTarget extends TargetHandler implements Runnable {
         try {
             walk(state, vfsKey, ref, path);
         } catch (Exception ex) {
-            log.warn("walk fail " + ref + " @ " + path.getRealPath(), ex);
+            log.warn("walk fail {} @ {}", ref, path.getRealPath(), ex);
         }
     }
 
@@ -494,4 +451,70 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
     }
 
+    private class ForwardingFileSource extends FileSource {
+
+        private final boolean forwardMetaData;
+        private final AtomicBoolean doComplete = new AtomicBoolean();
+
+        public ForwardingFileSource(boolean forwardMetaData) {
+            super(FileTarget.this.getChannelMaster(), MeshyConstants.LINK_NAMED,
+                    FileTarget.this.paths.toArray(new String[FileTarget.this.paths.size()]));
+            this.forwardMetaData = forwardMetaData;
+        }
+
+        @Override
+        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+            FileTarget.this.send(Meshy.getBytes(length, buffer));
+        }
+
+        @Override
+        public void init(int session, int targetHandler, Set<Channel> group) {
+            if (forwardMetaData) {
+                //directly get size from group since channels is not set yet;
+                int peerCount = group.size();
+                FileReference flagRef = new FileReference("peers", 0, peerCount);
+                FileTarget.this.send(flagRef.encode(peersToString(group)));
+            }
+            super.init(session, targetHandler, group);
+        }
+
+        // called per individual remote mesh node response complete
+        @Override
+        public void receiveComplete(ChannelState state, int completedSession) throws Exception {
+            super.receiveComplete(state, completedSession);
+            if (forwardMetaData) {
+                int peerCount = getPeerCount();
+                FileReference flagRef = new FileReference("response", 0, peerCount);
+                FileTarget.this.send(flagRef.encode(state.getChannelRemoteAddress().getHostName()));
+            }
+            if (doComplete.compareAndSet(true, false)) {
+                if (!firstDone.compareAndSet(false, true)) {
+                    findTime.addAndGet(System.currentTimeMillis() - markTime);
+                    findsRunning.dec();
+                    FileTarget.this.sendComplete();
+                }
+            }
+        }
+
+        @Override
+        public void receiveComplete() throws Exception {
+            doComplete.set(true);
+        }
+
+        private String peersToString(Iterable<Channel> peers) {
+            try {
+                StringBuilder sb = new StringBuilder();
+                for (Channel peer : peers) {
+                    if (sb.length() > 0) {
+                        sb.append(',');
+                    }
+                    sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
+                }
+                return sb.toString();
+            } catch (Exception e) {
+                return e.getMessage();
+            }
+        }
+
+    }
 }

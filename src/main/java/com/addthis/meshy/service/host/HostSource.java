@@ -27,6 +27,7 @@ import java.util.Map;
 import com.addthis.basis.util.Bytes;
 
 import com.addthis.meshy.ChannelMaster;
+import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.service.peer.PeerService;
 import com.addthis.meshy.SourceHandler;
@@ -70,7 +71,11 @@ public class HostSource extends SourceHandler {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void channelClosed(ChannelState state) {
+    }
+
+    @Override
+    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int hosts = Bytes.readInt(in);
         while (hosts-- > 0) {

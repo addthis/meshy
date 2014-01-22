@@ -88,6 +88,8 @@ public class ChannelState extends SimpleChannelHandler {
 
     private ChannelBuffer buffer = bufferFactory.allocateBuffer(16384);
     private READMODE mode = READMODE.ReadType;
+    // last session id for which a handler was created on this channel. should always be > than the last
+    private int lastCreatedSession = -1;
     private int type;
     private int session;
     private int length;
@@ -277,17 +279,23 @@ public class ChannelState extends SimpleChannelHandler {
                     } else {
                         handler = targetHandlers.get(session);
                         if ((handler == null) && (master instanceof MeshyServer)) {
-                            handler = master.createHandler(type);
-                            ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
-                            log.debug("{} createHandler {} session={}", this, handler, session);
-                            if (targetHandlers.put(session, handler) != null) {
-                                log.debug("clobbered session {} with {}", session, handler);
-                            }
-                            if (targetHandlers.size() >= excessiveTargets) {
-                                log.debug("excessive targets reached, current targetHandlers = {}", targetHandlers.size());
-                                if (log.isTraceEnabled()) {
-                                    debugSessions();
+                            if (session > lastCreatedSession) {
+                                handler = master.createHandler(type);
+                                lastCreatedSession = session;
+                                ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
+                                log.debug("{} createHandler {} session={}", this, handler, session);
+                                if (targetHandlers.put(session, handler) != null) {
+                                    log.debug("clobbered session {} with {}", session, handler);
                                 }
+                                if (targetHandlers.size() >= excessiveTargets) {
+                                    log.debug("excessive targets reached, current targetHandlers = {}", targetHandlers.size());
+                                    if (log.isTraceEnabled()) {
+                                        debugSessions();
+                                    }
+                                }
+                            } else {
+                                log.debug("Ignoring bad handler creation request for session {} lastSession {}",
+                                        session, lastCreatedSession); // happens with fast streams and send-mores
                             }
                         }
                     }

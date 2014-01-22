@@ -62,6 +62,7 @@ import com.yammer.metrics.core.VirtualMachineMetrics;
 import org.jboss.netty.bootstrap.ClientBootstrap;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.channel.ChannelException;
 import org.jboss.netty.channel.ChannelFactory;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelHandlerContext;
@@ -246,35 +247,26 @@ public abstract class Meshy implements ChannelMaster, Closeable {
      */
     @Override
     public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid) {
-        Set<Channel> group;
-        HashSet<String> uuids = new HashSet<>();
-        final boolean breakOnMatch = targetUuid != null && !targetUuid.isEmpty();
+        Collection<ChannelState> matches = getChannels(targetUuid);
+        if (matches.isEmpty()) {
+            throw new ChannelException("no matching mesh peers");
+        }
         int sessionID = nextSession.incrementAndGet();
-        synchronized (connectedChannels) {
-            group = new HashSet<>(breakOnMatch ? 1 : connectedChannels.size());
-            for (ChannelState state : connectedChannels) {
-                if ((targetUuid == MeshyConstants.LINK_ALL) ||
-                    (targetUuid == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
-                    (state.getName() != null && targetUuid.equals(state.getName()))) {
-                    /* prevent dups if >1 connection to the same host */
-                    if (state.getName() != null && !uuids.add(state.getName())) {
-                        continue;
-                    }
-                    group.add(state.getChannel());
-                    /* add channel callback path to source */
-                    state.addSourceHandler(sessionID, sourceHandler);
-                    if (breakOnMatch) {
-                        break;
-                    }
-                }
-            }
+        Set<Channel> group = new HashSet<>(matches.size());
+        for (ChannelState state : matches) {
+            group.add(state.getChannel());
         }
         group = Collections.synchronizedSet(group);
         sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
+        for (ChannelState state : matches) {
+            /* add channel callback path to source */
+            state.addSourceHandler(sessionID, sourceHandler);
+            if (!state.getChannel().isOpen()) {
+                group.remove(state); // may or may not be needed
+            }
+        }
         log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
-                this, sourceHandler, targetHandler,
-                targetUuid != null ? "'" + targetUuid + "'" : null,
-                group, sessionID);
+                this, sourceHandler, targetHandler, targetUuid, group, sessionID);
     }
 
     /**
@@ -283,15 +275,28 @@ public abstract class Meshy implements ChannelMaster, Closeable {
      */
     @Override
     public Collection<ChannelState> getChannels(final String nameFilter) {
-        HashSet<ChannelState> set = new HashSet<>();
+        Collection<ChannelState> group;
+        HashSet<String> uuids = new HashSet<>();
+        final boolean breakOnMatch = nameFilter != MeshyConstants.LINK_ALL &&
+                                     nameFilter != MeshyConstants.LINK_NAMED;
         synchronized (connectedChannels) {
+            group = new ArrayList<>(breakOnMatch ? 1 : connectedChannels.size());
             for (ChannelState state : connectedChannels) {
-                if ((nameFilter == MeshyConstants.LINK_ALL) || (state.getRemoteAddress() != null && (nameFilter == MeshyConstants.LINK_NAMED || nameFilter.equals(state.getName())))) {
-                    set.add(state);
+                if ((nameFilter == MeshyConstants.LINK_ALL) ||
+                    (nameFilter == MeshyConstants.LINK_NAMED && state.getRemoteAddress() != null) ||
+                    (state.getName() != null && nameFilter.equals(state.getName()))) {
+                    /* prevent dups if >1 connection to the same host */
+                    if (state.getName() != null && !uuids.add(state.getName())) {
+                        continue;
+                    }
+                    group.add(state);
+                    if (breakOnMatch) {
+                        break;
+                    }
                 }
             }
         }
-        return set;
+        return group;
     }
 
     @Override

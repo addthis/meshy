@@ -43,6 +43,8 @@ public abstract class SourceHandler implements SessionHandler {
     static final int DEFAULT_COMPLETE_TIMEOUT = Parameter.intValue("meshy.complete.timeout", 120);
     static final int DEFAULT_RESPONSE_TIMEOUT = Parameter.intValue("meshy.source.timeout", 0);
     static final boolean closeSlowChannels = Parameter.boolValue("meshy.source.closeSlow", false);
+
+    // only used by response watcher
     static final Set<SourceHandler> activeSources = Collections.newSetFromMap(new ConcurrentHashMap<SourceHandler, Boolean>());
     // TODO: use scheduled thread pool
     static final Thread responseWatcher = new Thread("Source Response Watcher") {
@@ -85,7 +87,6 @@ public abstract class SourceHandler implements SessionHandler {
     private long readTimeout;
     private long completeTimeout;
     private Set<Channel> channels;
-    private ChannelState state;
 
     public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass) {
         this(master, targetClass, MeshyConstants.LINK_ALL);
@@ -104,9 +105,9 @@ public abstract class SourceHandler implements SessionHandler {
 
     private void handleChannelTimeouts() {
         if ((readTimeout > 0) && ((JitterClock.globalTime() - readTime) > readTimeout)) {
-            log.info(this + " response timeout on channel: " + channelsToList());
+            log.info("{} response timeout on channel: {}", this, channelsToList());
             if (closeSlowChannels) {
-                log.info("closing " + channels.size() + " channel(s)");
+                log.warn("closing {} channel(s)", channels.size());
                 synchronized (channels) {
                     for (Channel channel : channels) {
                         channel.close();
@@ -124,10 +125,6 @@ public abstract class SourceHandler implements SessionHandler {
 
     public ChannelMaster getChannelMaster() {
         return master;
-    }
-
-    public ChannelState getChannelState() {
-        return state;
     }
 
     public void init(int session, int targetHandler, Set<Channel> group) {
@@ -190,7 +187,7 @@ public abstract class SourceHandler implements SessionHandler {
 
     private boolean send(final ChannelBuffer buffer, final SendWatcher watcher, final int reportBytes) {
         if (log.isTraceEnabled()) {
-            log.trace(this + " send " + buffer.capacity() + " to " + channels.size());
+            log.trace("{} send {} to {}", this, buffer.capacity(), channels.size());
         }
         if (!channels.isEmpty()) {
             final int peerCount = channels.size();
@@ -212,7 +209,7 @@ public abstract class SourceHandler implements SessionHandler {
                 @Override
                 public void operationComplete(ChannelGroupFuture future) throws Exception {
                     master.sentBytes(reportBytes * peerCount);
-                    state.returnSendBuffer(buffer);
+                    ChannelState.returnSendBuffer(buffer);
                     if (watcher != null) {
                         watcher.sendFinished(reportBytes);
                     }
@@ -225,25 +222,19 @@ public abstract class SourceHandler implements SessionHandler {
 
     @Override
     public void receive(ChannelState state, int receivingSession, int length, ChannelBuffer buffer) throws Exception {
-        this.state = state;
         this.readTime = JitterClock.globalTime();
-        if (log.isDebugEnabled()) {
-            log.debug(this + " receive [" + receivingSession + "] l=" + length);
-        }
-        receive(length, buffer);
+        log.debug("{} receive [{}] l={}", this, receivingSession, length);
+        receive(state, length, buffer);
     }
 
     @Override
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
-        this.state = state;
-        if (log.isDebugEnabled()) {
-            log.debug(this + " receiveComplete.1 [" + completedSession + "]");
-        }
+        log.debug("{} receiveComplete.1 [{}]", this, completedSession);
         Channel channel = state.getChannel();
         if (channel != null) {
             channels.remove(channel);
             if (!channel.isOpen()) {
-                channelClosed();
+                channelClosed(state);
             }
         }
         if (channels.isEmpty()) {
@@ -253,9 +244,7 @@ public abstract class SourceHandler implements SessionHandler {
 
     @Override
     public void receiveComplete(int completedSession) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug(this + " receiveComplete.2 [" + completedSession + "]");
-        }
+        log.debug("{} receiveComplete.2 [{}]", this, completedSession);
         // ensure this is only called once
         if (complete.compareAndSet(false, true)) {
             if (sent.get()) {
@@ -264,10 +253,6 @@ public abstract class SourceHandler implements SessionHandler {
             receiveComplete();
             activeSources.remove(this);
         }
-    }
-
-    public void channelClosed() {
-        // override in subclasses
     }
 
     private String channelsToList() {
@@ -286,7 +271,7 @@ public abstract class SourceHandler implements SessionHandler {
         if (waited.compareAndSet(false, true) && sent.get()) {
             try {
                 if (!gate.tryAcquire(completeTimeout, TimeUnit.MILLISECONDS)) {
-                    log.warn(this + " failed to waitComplete() normally from channels: " + channelsToList());
+                    log.warn("{} failed to waitComplete() normally from channels: {}", this, channelsToList());
                     activeSources.remove(this);
                 }
             } catch (Exception ex) {
@@ -295,7 +280,9 @@ public abstract class SourceHandler implements SessionHandler {
         }
     }
 
-    public abstract void receive(int length, ChannelBuffer buffer) throws Exception;
+    public abstract void channelClosed(ChannelState state);
+
+    public abstract void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception;
 
     public abstract void receiveComplete() throws Exception;
 }
