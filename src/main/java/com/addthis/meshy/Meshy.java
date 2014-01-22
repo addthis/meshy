@@ -262,7 +262,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
             /* add channel callback path to source */
             state.addSourceHandler(sessionID, sourceHandler);
             if (!state.getChannel().isOpen()) {
-                group.remove(state); // may or may not be needed
+                group.remove(state.getChannel()); // may or may not be needed
             }
         }
         log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
