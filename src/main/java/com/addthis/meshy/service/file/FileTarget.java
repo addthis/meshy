@@ -194,6 +194,9 @@ public class FileTarget extends TargetHandler implements Runnable {
                             paths.toArray(new String[paths.size()]));
                 } catch (ChannelException ignored) {
                     // can happen when there are no remote hosts
+                    if (forwardMetaData) {
+                        forwardPeerList(Collections.<Channel>emptyList());
+                    }
                 }
             } //else -- just look ourselves
 
