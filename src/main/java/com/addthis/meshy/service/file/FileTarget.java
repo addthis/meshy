@@ -17,6 +17,7 @@ import java.io.IOException;
 
 import java.net.InetSocketAddress;
 
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -471,9 +472,7 @@ public class FileTarget extends TargetHandler implements Runnable {
         public void init(int session, int targetHandler, Set<Channel> group) {
             if (forwardMetaData) {
                 //directly get size from group since channels is not set yet;
-                int peerCount = group.size();
-                FileReference flagRef = new FileReference("peers", 0, peerCount);
-                FileTarget.this.send(flagRef.encode(peersToString(group)));
+                forwardPeerList(group);
             }
             super.init(session, targetHandler, group);
         }
@@ -501,6 +500,12 @@ public class FileTarget extends TargetHandler implements Runnable {
             doComplete.set(true);
         }
 
+        private void forwardPeerList(Collection<Channel> peerList) {
+            int peerCount = peerList.size();
+            FileReference flagRef = new FileReference("peers", 0, peerCount);
+            FileTarget.this.send(flagRef.encode(peersToString(peerList)));
+        }
+
         private String peersToString(Iterable<Channel> peers) {
             try {
                 StringBuilder sb = new StringBuilder();
@@ -515,6 +520,5 @@ public class FileTarget extends TargetHandler implements Runnable {
                 return e.getMessage();
             }
         }
-
     }
 }
