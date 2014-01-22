@@ -173,7 +173,7 @@ public class FileTarget extends TargetHandler implements Runnable {
         try {
             doFind();
         } catch (Exception e) {
-            log.warn("FileTarget:run() error", e);
+            log.error("FileTarget:run() error", e);
         }
     }
 

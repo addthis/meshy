@@ -313,7 +313,7 @@ public class ChannelState extends SimpleChannelHandler {
                                 handler.receive(this, session, length, buffer);
                             }
                         } catch (Exception ex) {
-                            log.warn("messageReceived error", ex);
+                            log.error("messageReceived error", ex);
                         }
                     }
                     int read = readable - buffer.readableBytes();
