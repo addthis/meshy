@@ -78,7 +78,7 @@ public abstract class SourceHandler implements SessionHandler {
     private final AtomicBoolean sent = new AtomicBoolean(false);
     private final AtomicBoolean complete = new AtomicBoolean(false);
     private final AtomicBoolean waited = new AtomicBoolean(false);
-    private final Semaphore gate = new Semaphore(1);
+    private final Semaphore gate = new Semaphore(0);
     private final ChannelMaster master;
 
     private int session;
@@ -192,11 +192,6 @@ public abstract class SourceHandler implements SessionHandler {
         if (!channels.isEmpty()) {
             final int peerCount = channels.size();
             if (sent.compareAndSet(false, true)) {
-                try {
-                    gate.acquire();
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                }
             }
             List<ChannelFuture> futures = new ArrayList<>(channels.size());
             synchronized (channels) {
