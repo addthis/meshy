@@ -17,6 +17,7 @@ package com.addthis.meshy;
 public interface MeshyConstants {
 
     int KEY_RESPONSE = 0;
+    int KEY_EXISTING = Integer.MIN_VALUE;
     String LINK_ALL = null;
     String LINK_NAMED = "";
     byte[] EMPTY_BYTES = new byte[0];

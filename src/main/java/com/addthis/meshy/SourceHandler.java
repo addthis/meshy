@@ -43,6 +43,7 @@ public abstract class SourceHandler implements SessionHandler {
     static final int DEFAULT_COMPLETE_TIMEOUT = Parameter.intValue("meshy.complete.timeout", 120);
     static final int DEFAULT_RESPONSE_TIMEOUT = Parameter.intValue("meshy.source.timeout", 0);
     static final boolean closeSlowChannels = Parameter.boolValue("meshy.source.closeSlow", false);
+    static final boolean DISABLE_CREATION_FRAMES = Parameter.boolValue("meshy.source.noCreationFrames", false);
 
     // only used by response watcher
     static final Set<SourceHandler> activeSources = Collections.newSetFromMap(new ConcurrentHashMap<SourceHandler, Boolean>());
@@ -152,6 +153,7 @@ public abstract class SourceHandler implements SessionHandler {
     /**
      * returned set must be synchronized on for iteration, and probably
      * should not modify the contents.
+     *
      * @return peers
      */
     public Set<Channel> getPeers() {
@@ -181,23 +183,25 @@ public abstract class SourceHandler implements SessionHandler {
     }
 
     @Override
-    public boolean send(byte[] data, SendWatcher watcher) {
-        return send(ChannelState.allocateSendBuffer(targetHandler, session, data), watcher, data.length);
-    }
-
-    private boolean send(final ChannelBuffer buffer, final SendWatcher watcher, final int reportBytes) {
-        if (log.isTraceEnabled()) {
-            log.trace("{} send {} to {}", this, buffer.capacity(), channels.size());
-        }
-        if (!channels.isEmpty()) {
-            final int peerCount = channels.size();
-            if (sent.compareAndSet(false, true)) {
+    public final boolean send(byte[] data, final SendWatcher watcher) {
+        synchronized (channels) {
+            if (channels.isEmpty()) {
+                return false;
             }
-            List<ChannelFuture> futures = new ArrayList<>(channels.size());
-            synchronized (channels) {
-                for (Channel c : channels) {
-                    futures.add(c.write(buffer.duplicate()));
-                }
+
+            int sendType = MeshyConstants.KEY_EXISTING;
+            if (sent.compareAndSet(false, true) || DISABLE_CREATION_FRAMES) {
+                sendType = targetHandler;
+            }
+
+            final ChannelBuffer buffer = ChannelState.allocateSendBuffer(sendType, session, data);
+            final int reportBytes = data.length;
+            final int peerCount = channels.size();
+
+            log.trace("{} send {} to {}", this, buffer.capacity(), peerCount);
+            List<ChannelFuture> futures = new ArrayList<>(peerCount);
+            for (Channel c : channels) {
+                futures.add(c.write(buffer.duplicate()));
             }
             ChannelGroupFuture future = new DefaultChannelGroupFuture(DummyChannelGroup.DUMMY, futures);
             future.addListener(new ChannelGroupFutureListener() {
@@ -212,7 +216,6 @@ public abstract class SourceHandler implements SessionHandler {
             });
             return true;
         }
-        return false;
     }
 
     @Override
