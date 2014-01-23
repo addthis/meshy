@@ -142,7 +142,7 @@ public class StreamSource extends SourceHandler {
                 stream.feed(Bytes.readFully(in));
                 break;
             default:
-                log.warn("source unknown mode: " + mode);
+                log.warn("source unknown mode: {}", mode);
                 break;
         }
     }
