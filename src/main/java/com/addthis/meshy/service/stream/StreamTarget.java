@@ -347,7 +347,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     private void scheduleForSending() {
         log.trace("{} scheduleTask", this);
         // Paths that start with meshy are usually in-memory stat collections
-        if (fileName == null) {
+        if (fileName.startsWith("/meshy/")) {
             inMemorySenderPool.execute(this);
         } else {
             senderPool.execute(this);
