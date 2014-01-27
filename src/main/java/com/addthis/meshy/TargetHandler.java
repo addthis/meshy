@@ -13,13 +13,12 @@
  */
 package com.addthis.meshy;
 
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.base.Objects;
 
 import org.jboss.netty.buffer.ChannelBuffer;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,19 +30,13 @@ public abstract class TargetHandler implements SessionHandler {
     private final String shortName = className.substring(className.lastIndexOf(".") + 1);
     private final AtomicBoolean complete = new AtomicBoolean(false);
     private final AtomicBoolean waited = new AtomicBoolean(false);
-    private final Semaphore gate = new Semaphore(1);
+    private final CountDownLatch latch = new CountDownLatch(1);
 
     private MeshyServer master;
     private ChannelState channelState;
     private int session;
 
-    // non-static initializer
-    {
-        try {
-            gate.acquire();
-        } catch (Exception ex) {
-            log.error("Swallowing exception during non-static initialization of TargetHandler", ex);
-        }
+    public TargetHandler() {
     }
 
     public void setContext(MeshyServer master, ChannelState state, int session) {
@@ -58,8 +51,7 @@ public abstract class TargetHandler implements SessionHandler {
                 .add("channelState", channelState.getName())
                 .add("session", session)
                 .add("complete", complete)
-                .add("waited", waited)
-                .add("gate-permits", gate.availablePermits());
+                .add("waited", waited);
     }
 
     @Override
@@ -142,7 +134,7 @@ public abstract class TargetHandler implements SessionHandler {
         // ensure this is only called once
         if (complete.compareAndSet(false, true)) {
             receiveComplete();
-            gate.release();
+            latch.countDown();
         }
     }
 
@@ -151,7 +143,7 @@ public abstract class TargetHandler implements SessionHandler {
         // this is technically incorrect, but prevents lockups
         if (waited.compareAndSet(false, true)) {
             try {
-                gate.acquire();
+                latch.await();
             } catch (Exception ex) {
                 log.error("Swallowing exception while waitComplete() on targetHandler", ex);
             }
