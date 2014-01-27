@@ -150,16 +150,6 @@ public abstract class SourceHandler implements SessionHandler {
         return channels.size();
     }
 
-    /**
-     * returned set must be synchronized on for iteration, and probably
-     * should not modify the contents.
-     *
-     * @return peers
-     */
-    public Set<Channel> getPeers() {
-        return channels;
-    }
-
     public String getPeerString() {
         StringBuilder sb = new StringBuilder(10 * channels.size());
         synchronized (channels) {
