@@ -42,7 +42,7 @@ public abstract class SourceHandler implements SessionHandler {
     private static final Logger log = LoggerFactory.getLogger(SourceHandler.class);
     static final int DEFAULT_COMPLETE_TIMEOUT = Parameter.intValue("meshy.complete.timeout", 120);
     static final int DEFAULT_RESPONSE_TIMEOUT = Parameter.intValue("meshy.source.timeout", 0);
-    static final boolean closeSlowChannels = Parameter.boolValue("meshy.source.closeSlow", false);
+    static final boolean SLOW_SLOW_CHANNELS = Parameter.boolValue("meshy.source.closeSlow", false);
     static final boolean DISABLE_CREATION_FRAMES = Parameter.boolValue("meshy.source.noCreationFrames", false);
 
     // only used by response watcher
@@ -107,7 +107,7 @@ public abstract class SourceHandler implements SessionHandler {
     private void handleChannelTimeouts() {
         if ((readTimeout > 0) && ((JitterClock.globalTime() - readTime) > readTimeout)) {
             log.info("{} response timeout on channel: {}", this, channelsToList());
-            if (closeSlowChannels) {
+            if (SLOW_SLOW_CHANNELS) {
                 log.warn("closing {} channel(s)", channels.size());
                 synchronized (channels) {
                     for (Channel channel : channels) {
