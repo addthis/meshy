@@ -230,8 +230,7 @@ public abstract class SourceHandler implements SessionHandler {
         }
     }
 
-    @Override
-    public void receiveComplete(int completedSession) throws Exception {
+    private void receiveComplete(int completedSession) throws Exception {
         log.debug("{} receiveComplete.2 [{}]", this, completedSession);
         // ensure this is only called once
         if (complete.compareAndSet(false, true)) {

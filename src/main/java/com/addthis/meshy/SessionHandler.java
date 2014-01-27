@@ -26,7 +26,5 @@ public interface SessionHandler {
 
     void receiveComplete(ChannelState state, int session) throws Exception;
 
-    void receiveComplete(int session) throws Exception;
-
     void waitComplete();
 }

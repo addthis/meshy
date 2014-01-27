@@ -136,8 +136,7 @@ public abstract class TargetHandler implements SessionHandler {
         receiveComplete(completedSession);
     }
 
-    @Override
-    public void receiveComplete(int completedSession) throws Exception {
+    private void receiveComplete(int completedSession) throws Exception {
         assert this.session == completedSession;
         log.debug("{} receiveComplete.2 [{}]", this, completedSession);
         // ensure this is only called once
