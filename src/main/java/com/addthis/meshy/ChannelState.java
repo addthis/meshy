@@ -28,7 +28,6 @@ import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +35,7 @@ import org.slf4j.LoggerFactory;
 /**
  * TODO implement pinger to teardown "dead" peers
  */
-public class ChannelState extends SimpleChannelHandler {
+public class ChannelState {
 
     private static final Logger log = LoggerFactory.getLogger(ChannelState.class);
     private static final int excessiveTargets = Parameter.intValue("meshy.channel.report.targets", 2000);
@@ -97,7 +96,6 @@ public class ChannelState extends SimpleChannelHandler {
     private InetSocketAddress remoteAddress;
 
     ChannelState(ChannelMaster master, Channel channel) {
-        super();
         this.master = master;
         this.channel = channel;
     }
