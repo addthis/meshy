@@ -169,7 +169,14 @@ public class SourceInputStream extends InputStream {
                     int updatedExpectingBytes = oldExpectingBytes - sizeIncludingOverhead;
                     // and without respect to the current value, we know our update moved it below
                     if (updatedExpectingBytes < refillThreshold) {
-                        requestMoreData();
+                        // for pathologically large chunks, try to recover the buffer state.
+                        // this should usually evaluate to '0 + 1'
+                        int overflowRecoverCount = (sizeIncludingOverhead / maxBufferSize) + 1;
+                        if (overflowRecoverCount != 1) {
+                            log.warn("Sending {} sendMore requests due to pathologically large chunk of size {}",
+                                    overflowRecoverCount, sizeIncludingOverhead);
+                        }
+                        requestMoreData(overflowRecoverCount);
                     }
                 }
                 log.trace("{} fill take={}", this, data.length);
@@ -206,9 +213,15 @@ public class SourceInputStream extends InputStream {
     }
 
     void requestMoreData() {
-        requestMoreData.inc();
-        source.requestMoreData();
-        expectingBytes.addAndGet(maxBufferSize);
+        requestMoreData(1);
+    }
+
+    void requestMoreData(int times) {
+        expectingBytes.addAndGet(maxBufferSize * times);
+        for (int i = 0; i < times; i++) {
+            requestMoreData.inc();
+            source.requestMoreData();
+        }
     }
 
     /**
