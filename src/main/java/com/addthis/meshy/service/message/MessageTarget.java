@@ -17,9 +17,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 
 import com.addthis.basis.util.Bytes;
 
@@ -47,12 +45,12 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
             if (list == null) {
                 list = new TargetListener[1];
             } else {
-                TargetListener[] newlist = new TargetListener[list.length+1];
+                TargetListener[] newlist = new TargetListener[list.length + 1];
                 System.arraycopy(list, 0, newlist, 0, list.length);
                 list = newlist;
             }
             targetListeners.put(topic, list);
-            list[list.length-1]=listener;
+            list[list.length - 1] = listener;
         }
     }
 
@@ -60,12 +58,12 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
         synchronized (targetListeners) {
             TargetListener[] list = targetListeners.get(topic);
             if (list != null) {
-                for (int i=0; i<list.length; i++) {
+                for (int i = 0; i < list.length; i++) {
                     if (list[i] == listener) {
-                        TargetListener[] newlist = new TargetListener[list.length-1];
+                        TargetListener[] newlist = new TargetListener[list.length - 1];
                         System.arraycopy(list, 0, newlist, 0, i);
-                        if (i < list.length-1) {
-                            System.arraycopy(list, i+1, newlist, i, newlist.length-i);
+                        if (i < list.length - 1) {
+                            System.arraycopy(list, i + 1, newlist, i, newlist.length - i);
                         }
                         list = newlist;
                         return;

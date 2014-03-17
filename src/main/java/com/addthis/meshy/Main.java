@@ -52,10 +52,11 @@ public final class Main {
                 if (args.length > 3) {
                     String cmd = args[3];
                     if (cmd.equals("ls")) {
-	                    String expr = args.length > 4 ? args[4] : "/*";
-	                    if (expr.endsWith("/")) {
-		                    expr += "*";
-	                    }
+                        String expr = args.length > 4 ? args[4] : "/*";
+                        if (expr.endsWith("/")) {
+                            System.out.println("Warning - appending a trailing * to file path for convenience.");
+                            expr += "*";
+                        }
                         FileSource fileSource = new FileSource(more, new String[]{expr});
                         fileSource.waitComplete();
                         for (FileReference file : fileSource.getFileList()) {
