@@ -33,7 +33,7 @@ import org.slf4j.LoggerFactory;
 
 public class FileSource extends SourceHandler {
 
-    protected static final Logger log = LoggerFactory.getLogger(FileTarget.class);
+    protected static final Logger log = LoggerFactory.getLogger(FileSource.class);
     static final boolean traceComplete = Parameter.boolValue("meshy.finder.debug.complete", false);
 
     private final LinkedList<FileReference> list = new LinkedList<>();
@@ -75,13 +75,9 @@ public class FileSource extends SourceHandler {
 
     private void requestFiles(String scope, String... matches) {
         send(Bytes.toBytes(scope));
-        if (log.isDebugEnabled()) {
-            log.debug(this + " scope=" + scope);
-        }
+        log.debug("{} scope={}", this, scope);
         for (String match : matches) {
-            if (log.isTraceEnabled()) {
-                log.trace(this + " request=" + match);
-            }
+            log.trace("{} request={}", this, match);
             send(Bytes.toBytes(match));
         }
         sendComplete();
@@ -100,23 +96,26 @@ public class FileSource extends SourceHandler {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
         /* sync not required b/c overridden in server-server calls */
         FileReference ref = new FileReference(Meshy.getBytes(length, buffer));
         if (filter == null || filter.accept(ref)) {
             receiveReference(ref);
         }
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv=" + list.size());
-        }
+        log.trace("{} recv={}", this, list.size());
     }
 
     @Override
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
         if (traceComplete) {
-            log.info("recv.complete [" + completedSession + "] " + Strings.join(fileRequest, ","));
+            log.info("recv.complete [{}] {}", completedSession, Strings.join(fileRequest, ","));
         }
         super.receiveComplete(state, completedSession);
+    }
+
+    // override to detect unexpected channel closures
+    @Override
+    public void channelClosed(ChannelState state) {
     }
 
     // override in subclasses for async handling
@@ -128,8 +127,6 @@ public class FileSource extends SourceHandler {
     // override in subclasses for async handling
     @Override
     public void receiveComplete() throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug(this + " recvComplete");
-        }
+        log.debug("{} recvComplete", this);
     }
 }

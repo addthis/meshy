@@ -18,13 +18,12 @@ import java.util.Collection;
 
 public interface ChannelMaster {
 
-    public String getUUID();
+    String getUUID();
 
     /**
      * session handler factory
      */
-
-    public TargetHandler createHandler(int type);
+    TargetHandler createHandler(int type);
 
     /**
      * init source handler connection group
@@ -33,21 +32,15 @@ public interface ChannelMaster {
      * @param targetHandler handler created on remote end
      * @param targetUuid    null for local, ""/empty for all, non-empty for single host
      */
-    public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid);
+    void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid);
 
-    /**
-     * reporting, inspection
-     */
+    Collection<ChannelState> getChannels(String nameFilter);
 
-    public Collection<ChannelState> getChannels(String nameFilter);
+    // metrics
 
-    /**
-     * metrics
-     */
+    void sentBytes(int size);
 
-    public void sentBytes(int size);
+    void recvBytes(int size);
 
-    public void recvBytes(int size);
-
-    public long lastEventTime();
+    long lastEventTime();
 }

@@ -23,6 +23,7 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelMaster;
+import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.SourceHandler;
@@ -72,9 +73,8 @@ public class StreamSource extends SourceHandler {
         } else {
             stream = null;
         }
-        if (log.isDebugEnabled()) {
-            log.debug(this + " new stream=" + stream + " file=" + fileName + " sendBuffer=" + bufferSize + " prefetch=" + FETCH_ON_OPEN);
-        }
+        log.debug("{} new stream={} file={} sendBuffer={} prefetch={}",
+                this, stream, fileName, bufferSize, FETCH_ON_OPEN);
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             out.write(params == null ? StreamService.MODE_START : StreamService.MODE_START_2);
@@ -89,7 +89,7 @@ public class StreamSource extends SourceHandler {
                 }
             }
             if (!send(out.toByteArray())) {
-                log.warn("Failed to send stream init data for " + this);
+                log.warn("Failed to send stream init data for {}", this);
             }
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -101,68 +101,60 @@ public class StreamSource extends SourceHandler {
 
     @Override
     public String toString() {
-        return super.toString() + ";fileName=" + fileName + ";nodeUuid=" + nodeUuid + ";more=" + moreRequests + ";recv=" + recvBytes + ";stream=" + (stream != null ? stream.toStatus() : "null");
+        return super.toString() + ";fileName=" + fileName + ";nodeUuid=" + nodeUuid + ";more=" + moreRequests +
+               ";recv=" + recvBytes + ";stream=" + (stream != null ? stream.toStatus() : "null");
     }
 
     public SourceInputStream getInputStream() {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " get input stream");
-        }
+        log.trace("{} get input stream", this);
         return stream;
     }
 
     public void requestMoreData() {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " send request more");
-        }
+        log.trace("{} send request more", this);
         send(new byte[]{StreamService.MODE_MORE});
         moreRequests++;
     }
 
     public void requestClose() {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " send close");
-        }
+        log.trace("{} send close", this);
         send(new byte[]{StreamService.MODE_CLOSE});
         sendComplete();
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int mode = in.read();
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv mode=" + mode + " len=" + length);
-        }
+        log.trace("{} recv mode={} len={}", this, mode, length);
         switch (mode) {
             case StreamService.MODE_MORE:
                 byte data[] = Bytes.readBytes(in, in.available());
                 recvBytes += data.length;
+                recvBytes += ChannelState.MESHY_BYTE_OVERHEAD + StreamService.STREAM_BYTE_OVERHEAD;
                 stream.feed(data);
                 break;
             case StreamService.MODE_CLOSE:
-                stream.feed(new byte[0]);
+                stream.feed(StreamService.CLOSE_BYTES);
                 break;
             case StreamService.MODE_FAIL:
                 stream.feed(StreamService.FAIL_BYTES);
                 stream.feed(Bytes.readFully(in));
                 break;
             default:
-                log.warn("source unknown mode: " + mode);
+                log.warn("source unknown mode: {}", mode);
                 break;
         }
     }
 
     @Override
     public void receiveComplete() throws Exception {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv send complete");
-        }
+        log.trace("{} recv send complete", this);
         sendComplete();
     }
 
     @Override
-    public void channelClosed() {
+    public void channelClosed(ChannelState state) {
         if (stream != null) {
             stream.feed(StreamService.FAIL_BYTES);
             stream.feed(Bytes.toBytes(StreamService.ERROR_CHANNEL_LOST));

@@ -88,13 +88,6 @@ public final class PeerService {
                 log.debug(master + " encode peer remote=" + (me != null ? me.getChannel().getRemoteAddress() : ""));
             }
             for (ChannelState channelState : master.getChannels(MeshyConstants.LINK_NAMED)) {
-                /* skip un-peered channels (which includes clients) */
-                if (channelState.getRemoteAddress() == null) {
-                    if (log.isDebugEnabled()) {
-                        log.debug(master + " encodePeer skip " + channelState);
-                    }
-                    continue;
-                }
                 Bytes.writeString(channelState.getName(), out);
                 encodeAddress(channelState.getRemoteAddress(), out);
                 if (log.isDebugEnabled()) {

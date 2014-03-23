@@ -65,6 +65,8 @@ import org.slf4j.LoggerFactory;
 
 public class MeshyServer extends Meshy {
 
+    public static final MessageFileSystem messageFileSystem = new MessageFileSystem();
+
     protected static final Logger log = LoggerFactory.getLogger(MeshyServer.class);
 
     private static final String secret = Parameter.value("meshy.secret");
@@ -73,7 +75,6 @@ public class MeshyServer extends Meshy {
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
     private static final ArrayList<byte[]> vmLocalNet = new ArrayList<>(3);
     private static final HashMap<String, VirtualFileSystem[]> vfsCache = new HashMap<>();
-    private static final MessageFileSystem messageFileSystem = new MessageFileSystem();
     private static final Counter peerCountMetric = Metrics.newCounter(Meshy.class, "peerCount");
     private static final HashSet<String> blockedPeers = new HashSet<>();
 
@@ -239,12 +240,17 @@ public class MeshyServer extends Meshy {
         log.info("server [" + getUUID() + "] on " + port + " @ " + rootDir);
         shutdownThread = new Thread() {
             public void run() {
-                log.info("Running shutdown hook..");
+                log.info("Running meshy shutdown hook..");
                 close();
-                log.info("Shutdown hook complete.");
+                log.info("Shutdown hook for meshy complete.");
             }
         };
         Runtime.getRuntime().addShutdownHook(shutdownThread);
+        addMessageFileSystemPaths();
+        initialized = true;
+    }
+
+    private void addMessageFileSystemPaths() {
         messageFileSystem.addPath("/meshy/" + getUUID() + "/stats", new InternalHandler() {
             @Override
             public byte[] handleMessageRequest(String fileName, Map<String, String> options) {
@@ -273,7 +279,39 @@ public class MeshyServer extends Meshy {
                 return out.toByteArray();
             }
         });
-        initialized = true;
+        messageFileSystem.addPath("/meshy/host/ban", new InternalHandler() {
+            /**
+             * If host option exists, then ban that host. Otherwise, list currently
+             * banned hosts.
+             */
+            @Override
+            public byte[] handleMessageRequest(String fileName, Map<String, String> options) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                String hostName = options.get("host");
+                synchronized (blockedPeers) {
+                    try {
+                        if (hostName == null) {
+                            for (String peer : blockedPeers) {
+                                Bytes.writeString(peer + "\n", out);
+                            }
+                        } else {
+                            if (blockedPeers.contains(hostName)) {
+                                Bytes.writeString(hostName + " already in blocked peers\n", out);
+                            } else {
+                                Bytes.writeString(hostName + " added to blocked peers\n", out);
+                            }
+                            if (dropPeer(hostName)) {
+                                Bytes.writeString(hostName + " connection closed (async)\n", out);
+                            } else {
+                                Bytes.writeString(hostName + " connection not found\n", out);
+                            }
+                        }
+                    } catch (IOException ignored) {
+                    }
+                }
+                return out.toByteArray();
+            }
+        });
     }
 
     @Override
@@ -302,9 +340,7 @@ public class MeshyServer extends Meshy {
         channelState.setName("temp-uuid-" + nextSession.incrementAndGet());
         InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
         if (needsPeering.remove(address)) {
-            if (log.isDebugEnabled()) {
-                log.debug(MeshyServer.this + " >>> starting peering with " + address);
-            }
+            log.debug("{} >>> starting peering with {}", MeshyServer.this, address);
             new PeerSource(this, channelState.getName());
         }
     }
@@ -367,21 +403,24 @@ public class MeshyServer extends Meshy {
         }
     }
 
-    public void blockPeer(final String peerUuid) {
+    public boolean blockPeer(final String peerUuid) {
         synchronized (blockedPeers) {
             blockedPeers.add(peerUuid);
         }
-        dropPeer(peerUuid);
+        return dropPeer(peerUuid);
     }
 
-    public void dropPeer(final String peerUuid) {
+    public boolean dropPeer(final String peerUuid) {
+        boolean hitAtLeastOnce = false;
         synchronized (connectedChannels) {
             for (ChannelState state : connectedChannels) {
-                if (state.getName().equals(peerUuid)) {
+                if (state.getName().equals(peerUuid) && state.getChannel().isOpen()) {
                     state.getChannel().close();
+                    hitAtLeastOnce = true;
                 }
             }
         }
+        return hitAtLeastOnce;
     }
 
     /**
@@ -410,9 +449,7 @@ public class MeshyServer extends Meshy {
                 for (Enumeration<InetAddress> eaddr = eni.nextElement().getInetAddresses(); eaddr.hasMoreElements();) {
                     InetAddress addr = eaddr.nextElement();
                     if (addr.equals(pAddr.getAddress()) && pAddr.getPort() == serverPort) {
-                        if (log.isDebugEnabled()) {
-                            log.debug(this + " skipping myself " + addr + " : " + serverPort);
-                        }
+                        log.debug("{} skipping myself {} : {}", this, addr, serverPort);
                         return null;
                     }
                 }
@@ -425,45 +462,33 @@ public class MeshyServer extends Meshy {
             byte peerAddr[] = pAddr.getAddress().getAddress();
             for (byte addr[] : vmLocalNet) {
                 if (Bytes.equals(peerAddr, addr)) {
-                    log.info("peer reject local " + pAddr);
+                    log.info("peer reject local {}", pAddr);
                     return null;
                 }
             }
         }
         /* skip peering again */
-        if (log.isDebugEnabled()) {
-            log.debug(this + " peer.check (uuid=" + peerUuid + " addr=" + pAddr + ")");
-        }
+        log.debug("{} peer.check (uuid={} addr={})", this, peerUuid, pAddr);
         synchronized (connectedChannels) {
             for (ChannelState channelState : connectedChannels) {
-                if (log.isTraceEnabled()) {
-                    log.trace(" --> state=" + channelState);
-                }
+                log.trace(" --> state={}", channelState);
                 if (peerUuid != null && channelState.getName() != null && channelState.getName().equals(peerUuid)) {
-                    if (log.isTraceEnabled()) {
-                        log.trace(this + " 1.peer.uuid " + peerUuid + " already connected");
-                    }
+                    log.trace("{} 1.peer.uuid {} already connected", this, peerUuid);
                     return null;
                 }
                 InetSocketAddress remoteAddr = channelState.getRemoteAddress();
                 if (remoteAddr != null && remoteAddr.equals(pAddr)) {
-                    if (log.isTraceEnabled()) {
-                        log.trace(this + " 2.peer.addr " + pAddr + " already connected");
-                    }
+                    log.trace("{} 2.peer.addr {} already connected", this, pAddr);
                     return null;
                 }
             }
             /* already actively peering with this uuid */
             if (peerUuid != null && !inPeering.add(peerUuid)) {
-                if (log.isTraceEnabled()) {
-                    log.trace(MeshyServer.this + " skip already peering " + peerUuid);
-                }
+                log.trace("{} skip already peering {}", MeshyServer.this, peerUuid);
                 return null;
             }
         }
-        if (log.isDebugEnabled()) {
-            log.debug(this + " connecting to " + peerUuid + " @ " + pAddr);
-        }
+        log.debug("{} connecting to {} @ {}", this, peerUuid, pAddr);
         /* allows us to know if *we* initiated the connection and thus must also initiate the peering */
         needsPeering.add(pAddr);
         /* connect to peer */

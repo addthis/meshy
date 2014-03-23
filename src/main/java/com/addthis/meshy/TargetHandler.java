@@ -13,11 +13,12 @@
  */
 package com.addthis.meshy;
 
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import com.google.common.base.Objects;
 
+import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,19 +30,13 @@ public abstract class TargetHandler implements SessionHandler {
     private final String shortName = className.substring(className.lastIndexOf(".") + 1);
     private final AtomicBoolean complete = new AtomicBoolean(false);
     private final AtomicBoolean waited = new AtomicBoolean(false);
-    private final Semaphore gate = new Semaphore(1);
+    private final CountDownLatch latch = new CountDownLatch(1);
 
     private MeshyServer master;
     private ChannelState channelState;
     private int session;
 
-    // non-static initializer
-    {
-        try {
-            gate.acquire();
-        } catch (Exception ex) {
-            log.error("Swallowing exception during non-static initialization of TargetHandler", ex);
-        }
+    public TargetHandler() {
     }
 
     public void setContext(MeshyServer master, ChannelState state, int session) {
@@ -50,9 +45,18 @@ public abstract class TargetHandler implements SessionHandler {
         this.session = session;
     }
 
+    protected Objects.ToStringHelper toStringHelper() {
+        return Objects.toStringHelper(this)
+                .add("shortName", shortName)
+                .add("channelState", channelState.getName())
+                .add("session", session)
+                .add("complete", complete)
+                .add("waited", waited);
+    }
+
     @Override
     public String toString() {
-        return channelState + "[FileTarget:" + shortName + ",s=" + session + "]";
+        return toStringHelper().toString();
     }
 
     public ChannelState getChannelState() {
@@ -68,9 +72,7 @@ public abstract class TargetHandler implements SessionHandler {
     }
 
     public void send(ChannelBuffer from, int length) {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " send.buf [" + length + "] " + from);
-        }
+        log.trace("{} send.buf [{}] {}", this, length, from);
         channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, from, length), null, length);
     }
 
@@ -80,16 +82,12 @@ public abstract class TargetHandler implements SessionHandler {
 
     @Override
     public boolean send(byte data[], SendWatcher watcher) {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " send " + data.length);
-        }
+        log.trace("{} send {}", this, data.length);
         return channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, data), watcher, data.length);
     }
 
     public void send(byte data[], int off, int len, SendWatcher watcher) {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " send " + data.length + " o=" + off + " l=" + len);
-        }
+        log.trace("{} send {} o={} l={}", this, data.length, off, len);
         channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, data, off, len), watcher, len);
     }
 
@@ -99,7 +97,7 @@ public abstract class TargetHandler implements SessionHandler {
 
     public int send(ChannelBuffer buffer, SendWatcher watcher) {
         if (log.isTraceEnabled()) {
-            log.trace(this + " send b=" + buffer + " l=" + buffer.readableBytes());
+            log.trace("{} send b={} l={}", this, buffer, buffer.readableBytes());
         }
         int length = buffer.readableBytes();
         channelState.send(buffer, watcher, length);
@@ -115,9 +113,7 @@ public abstract class TargetHandler implements SessionHandler {
     public void receive(ChannelState state, int receivingSession, int length, ChannelBuffer buffer) throws Exception {
         assert this.channelState == state;
         assert this.session == receivingSession;
-        if (log.isDebugEnabled()) {
-            log.debug(this + " receive [" + receivingSession + "] l=" + length);
-        }
+        log.debug("{} receive [{}] l={}", this, receivingSession, length);
         receive(length, buffer);
     }
 
@@ -125,30 +121,21 @@ public abstract class TargetHandler implements SessionHandler {
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
         assert this.channelState == state;
         assert this.session == completedSession;
-        if (log.isDebugEnabled()) {
-            log.debug(this + " receiveComplete.1 [" + completedSession + "]");
-        }
+        log.debug("{} receiveComplete.1 [{}]", this, completedSession);
         if (!state.getChannel().isOpen()) {
             channelClosed();
         }
         receiveComplete(completedSession);
     }
 
-    @Override
-    public void receiveComplete(int completedSession) throws Exception {
+    private void receiveComplete(int completedSession) throws Exception {
         assert this.session == completedSession;
-        if (log.isDebugEnabled()) {
-            log.debug(this + " receiveComplete.2 [" + completedSession + "]");
-        }
+        log.debug("{} receiveComplete.2 [{}]", this, completedSession);
         // ensure this is only called once
         if (complete.compareAndSet(false, true)) {
             receiveComplete();
-            gate.release();
+            latch.countDown();
         }
-    }
-
-    public void channelClosed() {
-        // override in subclasses
     }
 
     @Override
@@ -156,12 +143,14 @@ public abstract class TargetHandler implements SessionHandler {
         // this is technically incorrect, but prevents lockups
         if (waited.compareAndSet(false, true)) {
             try {
-                gate.acquire();
+                latch.await();
             } catch (Exception ex) {
                 log.error("Swallowing exception while waitComplete() on targetHandler", ex);
             }
         }
     }
+
+    public abstract void channelClosed();
 
     public abstract void receive(int length, ChannelBuffer buffer) throws Exception;
 

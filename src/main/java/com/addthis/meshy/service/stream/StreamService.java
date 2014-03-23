@@ -18,6 +18,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.MeshyConstants;
+
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 import com.yammer.metrics.core.Meter;
@@ -32,22 +34,26 @@ public class StreamService {
 
     public static final String ERROR_EXCEED_OPEN = "Exceeded Max Open Files";
     public static final String ERROR_CHANNEL_LOST = "Channel Connection Lost";
+    public static final String ERROR_REMOTE_CHANNEL_LOST = "Remote Channel Connection Lost";
+    public static final int STREAM_BYTE_OVERHEAD = 1;
 
-    static final int MODE_START = 0;
-    static final int MODE_MORE = 1;
-    static final int MODE_FAIL = 2;
-    static final int MODE_CLOSE = 3;
-    static final int MODE_START_2 = 4; // passing options
-
-    /* secret byte handshake */
-    static final byte[] FAIL_BYTES = new byte[0];
-    /* bigger buffers = better performance, chance of OOMing a heavily loaded/peered mesh node */
-    /* pre-fetch stream on open */
+    /* not documented */
     static final boolean DIRECT_COPY = Parameter.boolValue("meshy.copy.direct", true);
     /* log dropped "more" requests */
     static final boolean LOG_DROP_MORE = Parameter.boolValue("meshy.log.dropmore", false);
     /* max time to wait for a VirtualFileInput read() call in sender threads */
     static final long READ_WAIT = Parameter.longValue("meshy.read.wait", 10);
+
+    // internal constants
+    static final int MODE_START = 0;
+    static final int MODE_MORE = 1;
+    static final int MODE_FAIL = 2;
+    static final int MODE_CLOSE = 3;
+    static final int MODE_START_2 = 4; // passing options
+    static final byte[] CLOSE_BYTES = MeshyConstants.EMPTY_BYTES; // not used for reference comparison -- only length
+    static final byte[] FAIL_BYTES = new byte[0]; // used in same-vm reference pointer comparison
+
+    // metrics -- some are also used in functional logic
     /* for enforcing MAX_OPEN_STREAMS */
     static final Counter openStreams = Metrics.newCounter(StreamService.class, "openStreams");
     static final Meter newStreamMeter = Metrics.newMeter(StreamService.class, "newStreams", "newStreams", TimeUnit.SECONDS);

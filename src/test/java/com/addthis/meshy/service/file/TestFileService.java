@@ -24,8 +24,9 @@ import com.addthis.meshy.TestMesh;
 
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotEquals;
 
 
 public class TestFileService extends TestMesh {
@@ -39,7 +40,7 @@ public class TestFileService extends TestMesh {
                 "*/hosts",
         });
         files.waitComplete();
-        log.info("file.list --> " + files.getFileList());
+        log.info("file.list --> {}", files.getFileList());
         Map<String, FileReference> map = files.getFileMap();
         checkFile(map, new FileReference("/a/abc.xml", 0, 4).setHostUUID(server.getUUID()));
         checkFile(map, new FileReference("/a/def.xml", 0, 7).setHostUUID(server.getUUID()));
@@ -53,7 +54,7 @@ public class TestFileService extends TestMesh {
                 "*/hosts",
         });
         files.waitComplete();
-        log.info("file.list --> " + files.getFileList());
+        log.info("file.list --> {}", files.getFileList());
         map = files.getFileMap();
         checkFile(map, new FileReference("/a/abc.xml", 0, 4).setHostUUID(server.getUUID()));
         checkFile(map, new FileReference("/a/def.xml", 0, 7).setHostUUID(server.getUUID()));
@@ -75,9 +76,9 @@ public class TestFileService extends TestMesh {
         Meshy client = getClient(server1);
         FileSource files = new FileSource(client, new String[]{"*.xml"});
         files.waitComplete();
-        log.info("file.list --> " + files.getFileList());
+        log.info("file.list --> {}", files.getFileList());
         Map<String, FileReference> map = files.getFileMap();
-        log.info("file map --> " + map);
+        log.info("file map --> {}", map);
         checkFile(map, new FileReference("/abc.xml", 0, 4).setHostUUID(server1.getUUID()));
         checkFile(map, new FileReference("/def.xml", 0, 7).setHostUUID(server1.getUUID()));
         checkFile(map, new FileReference("/ghi.xml", 0, 4).setHostUUID(server2.getUUID()));
@@ -110,15 +111,15 @@ public class TestFileService extends TestMesh {
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
                 if (i == j) {
-                    assertTrue(refs[i].equals(refs[j]));
+                    assertEquals(refs[i], refs[j]);
                 } else {
-                    assertFalse(refs[i].equals(refs[j]));
+                    assertNotEquals(refs[i], refs[j]);
                 }
             }
         }
 
-        assertTrue(refs[0].equals(refs[3]));
-        assertTrue(refs[2].equals(refs[4]));
+        assertEquals(refs[0], refs[3]);
+        assertEquals(refs[2], refs[4]);
 
         refs[3].setHostUUID("b");
         refs[4].setHostUUID("b");
@@ -141,8 +142,8 @@ public class TestFileService extends TestMesh {
         refs[2].setHostUUID(null);
         refs[3].setHostUUID(null);
 
-        assertTrue(refs[0].hashCode() == refs[1].hashCode());
-        assertTrue(refs[2].hashCode() == refs[3].hashCode());
+        assertEquals(refs[0].hashCode(), refs[1].hashCode());
+        assertEquals(refs[2].hashCode(), refs[3].hashCode());
     }
 
 }

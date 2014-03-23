@@ -13,6 +13,7 @@
  */
 package com.addthis.meshy.service.peer;
 
+import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.SourceHandler;
@@ -27,18 +28,22 @@ public class PeerSource extends SourceHandler {
     public PeerSource(MeshyServer master, String tempUuid) {
         super(master, PeerTarget.class, tempUuid);
         if (log.isDebugEnabled()) {
-            log.debug(this + " encode to " + getPeerString());
+            log.debug("{} encode to {}", this, getPeerString());
         }
         send(PeerService.encodePeer(master, null));
         sendComplete();
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void channelClosed(ChannelState state) {
+    }
+
+    @Override
+    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
         if (log.isDebugEnabled()) {
-            log.debug(this + " decode from " + getPeerString());
+            log.debug("{} decode from {}", this, getPeerString());
         }
-        PeerService.decodePeer((MeshyServer) getChannelMaster(), getChannelState(), Meshy.getInput(length, buffer));
+        PeerService.decodePeer((MeshyServer) getChannelMaster(), state, Meshy.getInput(length, buffer));
     }
 
     @Override

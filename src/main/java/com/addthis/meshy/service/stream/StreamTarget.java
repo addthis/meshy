@@ -28,6 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.SendWatcher;
 import com.addthis.meshy.TargetHandler;
@@ -35,6 +36,7 @@ import com.addthis.meshy.VirtualFileInput;
 import com.addthis.meshy.VirtualFileReference;
 import com.addthis.meshy.VirtualFileSystem;
 
+import com.google.common.base.Objects;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -74,12 +76,10 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
 
     //closed is only set to true in modeClose
     private final AtomicBoolean closed = new AtomicBoolean(false);
-    //complete is only set to true in complete
-    private final AtomicBoolean complete = new AtomicBoolean(false);
+    //streamComplete is only set to true in streamComplete
+    private final AtomicBoolean streamComplete = new AtomicBoolean(false);
     private final AtomicInteger sendRemain = new AtomicInteger(0);
     private final AtomicBoolean queueState = new AtomicBoolean(false);
-    private final AtomicBoolean init = new AtomicBoolean(false);
-    private final AtomicBoolean more = new AtomicBoolean(false);
 
     private int maxSend = 0;
     private VirtualFileInput fileIn = null;
@@ -89,14 +89,22 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     private int sentBytes = 0;
 
     @Override
-    public String toString() {
-        return super.toString() + ";closed=" + closed + ";complete=" + complete + ";more=" + recvMore + ";sent=" + sentBytes + ";sendRemain=" + sendRemain + ";fileIn=" + fileName + ";remoteSource=" + remoteSource;
+    protected Objects.ToStringHelper toStringHelper() {
+        return super.toStringHelper()
+                .add("closed", closed)
+                .add("streamComplete", streamComplete)
+                .add("sendRemain", sendRemain)
+                .add("queueState", queueState)
+                .add("fileIn", fileIn)
+                .add("remoteSource", remoteSource)
+                .add("fileName", fileName)
+                .add("recvMore", recvMore)
+                .add("sentBytes", sentBytes)
+                .add("maxSend", maxSend);
     }
 
     private void sendFail(String message) {
-        if (log.isDebugEnabled()) {
-            log.debug(this + " sendFail " + message);
-        }
+        log.debug("{} sendFail {}", this, message);
         send(Bytes.cat(new byte[]{StreamService.MODE_FAIL}, Bytes.toBytes(message)));
         sendComplete();
     }
@@ -116,31 +124,24 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     @Override
     public void channelClosed() {
         if (remoteSource != null) {
-            if (log.isDebugEnabled()) {
-                log.debug(this + " closing remote on channel down");
-            }
+            log.debug("{} closing remote on channel down", this);
             remoteSource.requestClose();
         }
+        // cancelling the send tasks should be implicitly done by the enclosing complete calls
     }
 
-    private VirtualFileReference locateFile(VirtualFileSystem vfs, String path) {
-        if (log.isTraceEnabled()) {
-            log.trace("locate " + vfs + " --> " + path);
-        }
+    private static VirtualFileReference locateFile(VirtualFileSystem vfs, String path) {
+        log.trace("locate {} --> {}", vfs, path);
         String tokens[] = vfs.tokenizePath(path);
         VirtualFileReference fileRef = vfs.getFileRoot();
         for (String token : tokens) {
             fileRef = fileRef.getFile(token);
             if (fileRef == null) {
-                if (log.isTraceEnabled()) {
-                    log.trace("no file " + vfs + " --> " + path + " --> " + fileRef);
-                }
+                log.trace("no file {} --> {} --> {}", vfs, path, token);
                 return null;
             }
         }
-        if (log.isTraceEnabled()) {
-            log.trace("located " + vfs + " --> " + path + " --> " + fileRef);
-        }
+        log.trace("located {} --> {} --> {}", vfs, path, fileRef);
         return fileRef;
     }
 
@@ -148,43 +149,33 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     public void receive(int length, ChannelBuffer buffer) throws Exception {
         byte[] data = Meshy.getBytes(length, buffer);
         if (remoteSource != null) {
-            if (log.isTraceEnabled()) {
-                log.trace(this + " recv proxy to " + remoteSource);
-            }
+            log.trace("{} recv proxy to {}", this, remoteSource);
             remoteSource.send(data);
             return;
         }
         ByteArrayInputStream in = new ByteArrayInputStream(data);
         int mode = in.read();
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv mode=" + mode + " len=" + length);
-        }
+        log.trace("{} recv mode={} len={}", this, mode, length);
         switch (mode) {
             case StreamService.MODE_START:
             case StreamService.MODE_START_2:
-                init.set(true);
                 String nodeUuid = Bytes.readString(in);
                 fileName = Bytes.readString(in);
                 maxSend = Bytes.readInt(in);
-                if (more.get()) {
-                    log.info(this + " was more true : uuid=" + nodeUuid + " file=" + fileName + " max=" + maxSend);
-                }
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " start uuid=" + nodeUuid + " file=" + fileName + " max=" + maxSend);
-                }
+                log.trace("{} start uuid={} file={} max={}", this, nodeUuid, fileName, maxSend);
                 if (maxSend <= 0) {
                     sendFail("invalid buffer size: " + maxSend);
                     return;
                 }
                 if (StreamService.openStreams.count() > MAX_OPEN_STREAMS) {
-                    log.warn("max open files: rejecting " + fileName);
+                    log.warn("max open files: rejecting {}", fileName);
                     sendFail(StreamService.ERROR_EXCEED_OPEN);
                     return;
                 }
                 Map<String, String> params = null;
                 if (mode == StreamService.MODE_START_2) {
                     int count = Bytes.readInt(in);
-                    params = new HashMap<>();
+                    params = new HashMap<>(count);
                     while (count-- > 0) {
                         String key = Bytes.readString(in);
                         String val = Bytes.readString(in);
@@ -198,12 +189,13 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                         if (ref != null) {
                             fileIn = ref.getInput(params);
                             if (fileIn == null && log.isDebugEnabled()) {
-                                log.debug("null file :: vfs=" + vfs.getClass().getName() + " ref=" + ref + " param=" + params + " fileIn=" + fileIn);
+                                log.debug("null file :: vfs={} ref={} param={} fileIn={}",
+                                        vfs.getClass().getName(), ref, params, fileIn);
                             }
                             break;
                         }
                     }
-                    if (ref == null || fileIn == null) {
+                    if ((ref == null) || (fileIn == null)) {
                         sendFail("No Such File: " + fileName);
                         return;
                     }
@@ -211,13 +203,11 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     StreamService.openStreams.inc();
                     StreamService.newOpenStreams.incrementAndGet();
                     openStreamMap.put(fileName, ref);
-                    if (log.isTraceEnabled()) {
-                        log.trace(this + " start local=" + fileIn);
-                    }
+                    log.trace("{} start local={}", this, fileIn);
                 } else {
                     remoteSource = new StreamSource(getChannelMaster(), nodeUuid, nodeUuid, fileName, params, maxSend) {
                         @Override
-                        public void receive(int length, ChannelBuffer buffer) throws Exception {
+                        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
                             if (StreamService.DIRECT_COPY) {
                                 StreamTarget.this.send(buffer, length);
                             } else {
@@ -226,12 +216,18 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                         }
 
                         @Override
+                        public void channelClosed(ChannelState state) {
+                            StreamTarget.this.sendFail(StreamService.ERROR_REMOTE_CHANNEL_LOST +
+                                                       " for channel " + state.getChannel());
+                        }
+
+                        @Override
                         public void receiveComplete() {
                             StreamTarget.this.sendComplete();
                         }
                     };
                     if (log.isTraceEnabled()) {
-                        log.trace(this + " start remote=" + remoteSource + " #" + remoteSource.getPeerCount());
+                        log.trace("{} start remote={} #{}", this, remoteSource, remoteSource.getPeerCount());
                     }
                     if (remoteSource.getPeerCount() == 0) {
                         sendFail("no matching peers");
@@ -241,13 +237,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 }
                 break;
             case StreamService.MODE_MORE:
-                more.set(true);
-                if (!init.get()) {
-//                      log.emit(this + " was not init'd : file=" + fileName + " max=" + maxSend);
-                }
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " more request");
-                }
+                log.trace("{} more request", this);
                 int current = sendRemain.addAndGet(maxSend);
                 if (current - maxSend <= 0) {
                     if (queueState.compareAndSet(false, true)) {
@@ -257,13 +247,11 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 recvMore++;
                 break;
             case StreamService.MODE_CLOSE:
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " close request");
-                }
+                log.trace("{} close request", this);
                 modeClose();
                 break;
             default:
-                log.warn(getChannelMaster().getUUID() + " target unknown mode: " + mode);
+                log.warn("{} target unknown mode: {}", getChannelMaster().getUUID(), mode);
                 break;
         }
     }
@@ -284,13 +272,9 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     - Sets closed to true
      */
     private void modeClose() throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug(this + " close " + fileIn + " remote=" + remoteSource + " closed=" + closed);
-        }
+        log.debug("{} close {} remote={} closed={}", this, fileIn, remoteSource, closed);
         if (closed.compareAndSet(false, true)) {
-            if (log.isDebugEnabled()) {
-                log.debug(this + " sending close");
-            }
+            log.debug("{} sending close", this);
             send(new byte[]{StreamService.MODE_CLOSE});
             sendComplete();
             complete();
@@ -300,16 +284,12 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     /*
      - Called by modeClose and by receiveComplete
      - Closes the file and reduces open stream metrics
-     - Sets complete to true
+     - Sets streamComplete to true
       */
     private void complete() throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug(this + " complete " + fileIn + " remote=" + remoteSource + " complete=" + complete);
-        }
-        if (complete.compareAndSet(false, true) && fileIn != null) {
-            if (log.isDebugEnabled()) {
-                log.debug(this + " close file on complete");
-            }
+        log.debug("{} complete {} remote={} streamComplete={}", this, fileIn, remoteSource, streamComplete);
+        if (streamComplete.compareAndSet(false, true) && (fileIn != null)) {
+            log.debug("{} close file on complete", this);
             fileIn.close();
             StreamService.closedStreams.incrementAndGet();
             StreamService.openStreams.dec();
@@ -324,7 +304,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 return true;
             }
         }
-        return closed.get() || complete.get() || fileIn == null;
+        return closed.get() || streamComplete.get() || fileIn == null;
     }
 
     @Override
@@ -347,9 +327,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 StreamService.readWaitTime.addAndGet((int) (System.currentTimeMillis() - mark));
             /* TODO this sucks, but works */
                 if (StreamService.sendWaiting.get() > MAX_SEND_BUFFER) {
-                    if (log.isTraceEnabled()) {
-                        log.trace(this + " sleeping " + StreamService.sendWaiting + " > " + MAX_SEND_BUFFER);
-                    }
+                    log.trace("{} sleeping {} > {}", this, StreamService.sendWaiting, MAX_SEND_BUFFER);
                     Thread.sleep(10);
                     StreamService.sleeps.incrementAndGet();
                 }
@@ -367,28 +345,24 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     }
 
     private void scheduleForSending() {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " scheduleTask");
-        }
+        log.trace("{} scheduleTask", this);
         // Paths that start with meshy are usually in-memory stat collections
         if (fileName.startsWith("/meshy/")) {
             inMemorySenderPool.execute(this);
         } else {
             senderPool.execute(this);
         }
-        if (log.isTraceEnabled()) {
-            log.trace(this + " scheduled ");
-        }
+        log.trace("{} scheduled ", this);
     }
 
     private int doSendMore(SendWatcher sender) {
         if (log.isTraceEnabled()) {
-            log.trace(this + " sendMore for " + sender + " rem=" + sendRemain + " closed=" + closed + " complete=" + complete + " fileIn=" + fileIn);
+            log.trace(this + " sendMore for " + sender + " rem=" + sendRemain + " closed=" + closed + " streamComplete=" + streamComplete + " fileIn=" + fileIn);
         }
         try {
             if (maybeDropSend()) {
                 if (StreamService.LOG_DROP_MORE || log.isDebugEnabled()) {
-                    log.debug(this + " sendMore drop request sr=" + sendRemain + ", cl=" + closed + ", co=" + complete + ", fi=" + fileIn);
+                    log.debug(this + " sendMore drop request sr=" + sendRemain + ", cl=" + closed + ", co=" + streamComplete + ", fi=" + fileIn);
                 }
                 return -1;
             }
@@ -398,7 +372,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     log.trace(this + " send add read=" + next.length);
                 }
                 StreamService.readBytes.addAndGet(next.length);
-                ChannelBuffer buf = getSendBuffer(next.length + 1);
+                ChannelBuffer buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
                 buf.writeByte(StreamService.MODE_MORE);
                 buf.writeBytes(next);
                 int bytesSent = send(buf, sender);

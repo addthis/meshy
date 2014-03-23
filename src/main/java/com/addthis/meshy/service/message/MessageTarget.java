@@ -59,6 +59,12 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     }
 
     @Override
+    public void channelClosed() {
+        // target listener's only api method that would make sense is link down
+        // this will be called in a second anyway, so ignore
+    }
+
+    @Override
     public void receive(int length, ChannelBuffer buffer) throws Exception {
         InputStream in = Meshy.getInput(length, buffer);
         String topic = Bytes.readString(in);

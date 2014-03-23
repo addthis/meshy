@@ -33,6 +33,9 @@ import org.jboss.netty.buffer.ChannelBuffer;
 
 public class HostTarget extends TargetHandler {
 
+    boolean canceled = false;
+
+    @Override
     public void receive(int length, ChannelBuffer buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int count = Bytes.readInt(in);
@@ -45,7 +48,15 @@ public class HostTarget extends TargetHandler {
     }
 
     @Override
+    public void channelClosed() {
+        canceled = true;
+    }
+
+    @Override
     public void receiveComplete() throws Exception {
+        if (canceled) {
+            return;
+        }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Collection<ChannelState> links = getChannelMaster().getChannels(MeshyConstants.LINK_ALL);
         Bytes.writeInt(links.size(), out);
@@ -53,9 +64,7 @@ public class HostTarget extends TargetHandler {
             InetSocketAddress remote = linkState.getRemoteAddress();
             if (remote == null) {
                 remote = (InetSocketAddress) linkState.getChannel().getRemoteAddress();
-                if (log.isDebugEnabled()) {
-                    log.debug("missing remote for " + remote + " @ " + linkState);
-                }
+                log.debug("missing remote for {} @ {}", remote, linkState);
             }
             Bytes.writeString(linkState.getName() != null ? linkState.getName() : "<null>", out);
             PeerService.encodeAddress(remote, out);

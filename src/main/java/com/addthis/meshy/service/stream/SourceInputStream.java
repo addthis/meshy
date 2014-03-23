@@ -27,6 +27,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.ChannelState;
+
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 import com.yammer.metrics.core.Histogram;
@@ -48,7 +50,8 @@ public class SourceInputStream extends InputStream {
     /* max time to wait in seconds for a read response before timing out and closing stream */
     private static final int MAX_READ_WAIT = Parameter.intValue("meshy.stream.timeout", 0) * 1000;
 
-    private final Logger log = StreamService.log;
+    private static final Logger log = StreamService.log;
+
     private final AtomicInteger expectingBytes = new AtomicInteger(0);
     private final LinkedBlockingDeque<byte[]> deque = new LinkedBlockingDeque<>();
     private final StreamSource source;
@@ -93,7 +96,7 @@ public class SourceInputStream extends InputStream {
     void feed(byte data[]) {
         try {
             if (log.isTraceEnabled()) {
-                log.trace(this + " feed=" + data.length);
+                log.trace("{} feed={}", this, data.length);
             }
             basHisto.update(data.length);
             deque.put(data);
@@ -126,7 +129,7 @@ public class SourceInputStream extends InputStream {
         }
         if ((blocking && (current == null || current.available() == 0)) || (!blocking && currentData == null)) {
             if (log.isTraceEnabled()) {
-                log.trace(this + " fill c=" + (current != null ? current.available() : "empty"));
+                log.trace("{} fill c={}", this, current != null ? current.available() : "empty");
             }
             byte data[] = null;
             try {
@@ -136,7 +139,7 @@ public class SourceInputStream extends InputStream {
                 }
                 if (blocking) {
                     if (log.isTraceEnabled()) {
-                        log.trace(this + " fill from finderQueue=" + deque.size() + " wait=" + MAX_READ_WAIT);
+                        log.trace("{} fill from finderQueue={} wait={}", this, deque.size(), MAX_READ_WAIT);
                     }
                     long startTime = System.nanoTime();
                     data = MAX_READ_WAIT > 0 ? deque.poll(MAX_READ_WAIT, TimeUnit.MILLISECONDS) : deque.take();
@@ -155,24 +158,35 @@ public class SourceInputStream extends InputStream {
                         return false;
                     }
                 }
-                int newExpectingBytes = expectingBytes.getAndAdd(-data.length);
-                if (newExpectingBytes < refillThreshold) {
-                    synchronized (expectingBytes) {
-                        if (expectingBytes.get() < refillThreshold) {
-                            requestMoreData();
+
+                int sizeIncludingOverhead = data.length + ChannelState.MESHY_BYTE_OVERHEAD
+                                            + StreamService.STREAM_BYTE_OVERHEAD;
+
+                // returns previous value
+                int oldExpectingBytes = expectingBytes.getAndAdd(-sizeIncludingOverhead);
+                // if prior to our update, we were above the threshold
+                if (oldExpectingBytes >= refillThreshold) {
+                    int updatedExpectingBytes = oldExpectingBytes - sizeIncludingOverhead;
+                    // and without respect to the current value, we know our update moved it below
+                    if (updatedExpectingBytes < refillThreshold) {
+                        // for pathologically large chunks, try to recover the buffer state.
+                        // this should usually evaluate to '0 + 1'
+                        int overflowRecoverCount = (sizeIncludingOverhead / maxBufferSize) + 1;
+                        if (overflowRecoverCount != 1) {
+                            log.warn("Sending {} sendMore requests due to pathologically large chunk of size {}",
+                                    overflowRecoverCount, sizeIncludingOverhead);
                         }
+                        requestMoreData(overflowRecoverCount);
                     }
                 }
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " fill take=" + data.length);
-                }
+                log.trace("{} fill take={}", this, data.length);
             } catch (InterruptedException ex) {
-                log.warn(this + " close on stream service interrupted");
+                log.warn("{} close on stream service interrupted", this);
                 close();
                 /* important that we throw InterruptedIOException so that SourceTracker does not mark this file "dead" */
-                throw new InterruptedIOException();
+                throw new InterruptedIOException("stream interrupted");
             } catch (Exception ex) {
-                log.warn(this + " close on error " + ex);
+                log.warn("{} close on error", this, ex);
                 close();
                 throw new IOException(ex);
             }
@@ -180,24 +194,18 @@ public class SourceInputStream extends InputStream {
                 close();
                 byte[] error = deque.poll();
                 String errorMessage;
-                if (error == null) {
-                    errorMessage = "no failure message available.";
-                } else {
-                    errorMessage = Bytes.toString(error);
-                }
+                errorMessage = error == null ? "no failure message available." : Bytes.toString(error);
                 throw new IOException(errorMessage);
             } else if (data.length == 0) {
-                if (log.isTraceEnabled()) {
-                    log.trace(this + " fill exit on 0 bytes");
-                }
+                log.trace("{} fill exit on 0 bytes", this);
                 currentData = data;
                 done = true;
                 return false;
             }
-            if (!blocking) {
-                currentData = data;
-            } else {
+            if (blocking) {
                 current = new ByteArrayInputStream(data);
+            } else {
+                currentData = data;
             }
             return true;
         }
@@ -205,9 +213,15 @@ public class SourceInputStream extends InputStream {
     }
 
     void requestMoreData() {
-        requestMoreData.inc();
-        source.requestMoreData();
-        expectingBytes.addAndGet(maxBufferSize);
+        requestMoreData(1);
+    }
+
+    void requestMoreData(int times) {
+        expectingBytes.addAndGet(maxBufferSize * times);
+        for (int i = 0; i < times; i++) {
+            requestMoreData.inc();
+            source.requestMoreData();
+        }
     }
 
     /**
@@ -238,10 +252,10 @@ public class SourceInputStream extends InputStream {
 
     @Override
     public int read() throws IOException {
-        if (!fill(true)) {
-            return -1;
-        } else {
+        if (fill(true)) {
             return current.read();
+        } else {
+            return -1;
         }
     }
 
@@ -252,10 +266,10 @@ public class SourceInputStream extends InputStream {
 
     @Override
     public int read(byte buf[], int off, int len) throws IOException {
-        if (!fill(true)) {
-            return -1;
-        } else {
+        if (fill(true)) {
             return current.read(buf, off, len);
+        } else {
+            return -1;
         }
     }
 

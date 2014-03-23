@@ -16,9 +16,12 @@ package com.addthis.meshy;
 import java.net.InetSocketAddress;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
+import com.addthis.basis.collect.ConcurrentHashMapV8;
 import com.addthis.basis.util.Parameter;
+
+import com.google.common.base.Objects;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
@@ -26,7 +29,6 @@ import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,13 +36,15 @@ import org.slf4j.LoggerFactory;
 /**
  * TODO implement pinger to teardown "dead" peers
  */
-public class ChannelState extends SimpleChannelHandler {
+public class ChannelState {
 
     private static final Logger log = LoggerFactory.getLogger(ChannelState.class);
     private static final int excessiveTargets = Parameter.intValue("meshy.channel.report.targets", 2000);
     private static final int excessiveSources = Parameter.intValue("meshy.channel.report.sources", 2000);
 
     protected static final BufferAllocator bufferFactory = new BufferAllocator();
+
+    public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
 
     protected static enum READMODE {
         ReadType, ReadSession, ReadLength, ReadData
@@ -57,7 +61,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public static ChannelBuffer allocateSendBuffer(int type, int session, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(4 + 4 + 4 + length);
+        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -65,7 +69,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public static ChannelBuffer allocateSendBuffer(int type, int session, ChannelBuffer from, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(4 + 4 + 4 + length);
+        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -77,13 +81,14 @@ public class ChannelState extends SimpleChannelHandler {
         bufferFactory.returnBuffer(buffer);
     }
 
-    private final ConcurrentHashMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMapV8<>();
+    private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMapV8<>();
     private final ChannelMaster master;
     private final Channel channel;
 
     private ChannelBuffer buffer = bufferFactory.allocateBuffer(16384);
     private READMODE mode = READMODE.ReadType;
+    // last session id for which a handler was created on this channel. should always be > than the last
     private int type;
     private int session;
     private int length;
@@ -92,23 +97,36 @@ public class ChannelState extends SimpleChannelHandler {
     private InetSocketAddress remoteAddress;
 
     ChannelState(ChannelMaster master, Channel channel) {
-        super();
         this.master = master;
         this.channel = channel;
     }
 
+    protected Objects.ToStringHelper toStringHelper() {
+        return Objects.toStringHelper(this)
+                .add("targets", targetHandlers.size())
+                .add("sources", sourceHandlers.size())
+                .add("name", name)
+                .add("remoteAddress", remoteAddress)
+                .add("mode", mode)
+                .add("type", type)
+                .add("session", session)
+                .add("length", length)
+                .add("channel", channel)
+                .add("master", master.getUUID());
+    }
+
     @Override
     public String toString() {
-        return master + "[CS#" + hashCode() + ":n=" + getName() + ",r=" + remoteAddress + ",c=" + (channel != null ? channel.getRemoteAddress() : "null") + ",t=" + targetHandlers.size() + ",s=" + sourceHandlers.size() + "]";
+        return toStringHelper().toString();
     }
 
     /* helper to debug close() with open sessions/targets */
     protected void debugSessions() {
         if (!targetHandlers.isEmpty()) {
-            log.info(this + " targets --> " + targetHandlers);
+            log.info("{} targets --> {}", this, targetHandlers);
         }
         if (!sourceHandlers.isEmpty()) {
-            log.info(this + " sources --> " + sourceHandlers);
+            log.info("{} sources --> {}", this, sourceHandlers);
         }
     }
 
@@ -135,7 +153,7 @@ public class ChannelState extends SimpleChannelHandler {
                  * example is StreamService when EOF framing tells the
                  * client we're done before sendComplete() framing does.
                  */
-                log.info(this + " writing [" + reportBytes + "] to dead channel");
+                log.info("{} writing [{}] to dead channel", this, reportBytes);
                 if (watcher != null) {
                     /**
                      * for accounting, rate limiting reasons, we have to report these as sent.
@@ -153,7 +171,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public void setName(String name) {
-        log.debug(this + " setName=" + name);
+        log.debug("{} setName={}", this, name);
         this.name = name;
     }
 
@@ -180,7 +198,7 @@ public class ChannelState extends SimpleChannelHandler {
     public void addSourceHandler(int sessionID, SourceHandler handler) {
         sourceHandlers.put(sessionID, handler);
         if (sourceHandlers.size() >= excessiveSources) {
-            log.debug("excessive sources reached: " + sourceHandlers.size());
+            log.debug("excessive sources reached: {}", sourceHandlers.size());
             if (log.isTraceEnabled()) {
                 debugSessions();
             }
@@ -190,16 +208,16 @@ public class ChannelState extends SimpleChannelHandler {
     public void removeHandlerOnComplete(TargetHandler targetHandler) {
         /* ensure target session closure */
         if (targetHandlers.remove(targetHandler.getSessionId()) != null) {
-            log.debug("handler lingering on complete: " + targetHandler);
+            log.debug("handler lingering on complete: {}", targetHandler);
         }
     }
 
     public void channelConnected(ChannelStateEvent e) {
-        log.debug(this + " channel:connect [" + this.hashCode() + "] " + e);
+        log.debug("{} channel:connect [{}] {}", this, this.hashCode(), e);
     }
 
     public void channelClosed(ChannelStateEvent e) throws Exception {
-        log.debug(this + " channel:close [" + this.hashCode() + "] " + e);
+        log.debug("{} channel:close [{}] {}", this, this.hashCode(), e);
         for (Map.Entry<Integer, SessionHandler> entry : targetHandlers.entrySet()) {
             entry.getValue().receiveComplete(this, entry.getKey());
         }
@@ -209,9 +227,7 @@ public class ChannelState extends SimpleChannelHandler {
     }
 
     public void messageReceived(MessageEvent msg) {
-        if (log.isTraceEnabled()) {
-            log.trace(this + " recv msg=" + msg);
-        }
+        log.trace("{} recv msg={}", this, msg);
         final ChannelBuffer in = (ChannelBuffer) msg.getMessage();
         master.recvBytes(in.readableBytes());
         if (buffer.writableBytes() >= in.readableBytes()) {
@@ -222,9 +238,7 @@ public class ChannelState extends SimpleChannelHandler {
             out.writeBytes(in);
             returnSendBuffer(buffer);
             buffer = out;
-            if (log.isDebugEnabled()) {
-                log.debug(this + " recv.reallocate: " + out.writableBytes());
-            }
+            log.debug("{} recv.reallocate: {}", this, out.writableBytes());
         }
         loop:
         while (true) {
@@ -262,20 +276,23 @@ public class ChannelState extends SimpleChannelHandler {
                         handler = sourceHandlers.get(session);
                     } else {
                         handler = targetHandlers.get(session);
-                        if (handler == null && master instanceof MeshyServer) {
-                            handler = master.createHandler(type);
-                            ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
-                            if (log.isDebugEnabled()) {
-                                log.debug(this + " createHandler " + handler + " session=" + session);
-                            }
-                            if (targetHandlers.put(session, handler) != null) {
-                                log.debug("clobbered session " + session + " with " + handler);
-                            }
-                            if (targetHandlers.size() >= excessiveTargets) {
-                                log.debug("excessive targets reached, current targetHandlers = " + targetHandlers.size());
-                                if (log.isTraceEnabled()) {
-                                    debugSessions();
+                        if ((handler == null) && (master instanceof MeshyServer)) {
+                            if (type != MeshyConstants.KEY_EXISTING) {
+                                handler = master.createHandler(type);
+                                ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
+                                log.debug("{} createHandler {} session={}", this, handler, session);
+                                if (targetHandlers.put(session, handler) != null) {
+                                    log.debug("clobbered session {} with {}", session, handler);
                                 }
+                                if (targetHandlers.size() >= excessiveTargets) {
+                                    log.debug("excessive targets reached, current targetHandlers = {}", targetHandlers.size());
+                                    if (log.isTraceEnabled()) {
+                                        debugSessions();
+                                    }
+                                }
+                            } else {
+                                log.debug("Ignoring bad handler creation request for session {} type {}",
+                                        session, type); // happens with fast streams and send-mores
                             }
                         }
                     }
@@ -285,9 +302,7 @@ public class ChannelState extends SimpleChannelHandler {
                                 handler.receiveComplete(this, session);
                                 if (type == MeshyConstants.KEY_RESPONSE) {
                                     sourceHandlers.remove(session);
-                                    if (log.isDebugEnabled()) {
-                                        log.debug(this + " dropSession session=" + session);
-                                    }
+                                    log.debug("{} dropSession session={}", this, session);
                                 } else {
                                     targetHandlers.remove(session);
                                 }
@@ -295,13 +310,14 @@ public class ChannelState extends SimpleChannelHandler {
                                 handler.receive(this, session, length, buffer);
                             }
                         } catch (Exception ex) {
-                            log.warn("messageReceived error", ex);
+                            log.error("messageReceived error", ex);
                         }
                     }
                     int read = readable - buffer.readableBytes();
                     if (read < length) {
                         if (handler != null || log.isDebugEnabled()) {
-                            log.debug(this + " recv type=" + type + " handler=" + handler + " ssn=" + session + " did not consume all bytes (read=" + read + " of " + length + ")");
+                            log.debug("{} recv type={} handler={} ssn={} did not consume all bytes (read={} of {})",
+                                    this, type, handler, session, read, length);
                         }
                         buffer.skipBytes(length - read);
                     }

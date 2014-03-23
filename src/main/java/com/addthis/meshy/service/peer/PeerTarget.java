@@ -20,6 +20,8 @@ import org.jboss.netty.buffer.ChannelBuffer;
 
 public class PeerTarget extends TargetHandler {
 
+    boolean canceled = false;
+
     @Override
     public void receive(int length, ChannelBuffer buffer) throws Exception {
         if (log.isDebugEnabled()) {
@@ -29,9 +31,17 @@ public class PeerTarget extends TargetHandler {
     }
 
     @Override
+    public void channelClosed() {
+        canceled = true;
+    }
+
+    @Override
     public void receiveComplete() throws Exception {
+        if (canceled) {
+            return;
+        }
         if (log.isDebugEnabled()) {
-            log.debug(this + " encode to " + getChannelState().getChannelRemoteAddress());
+            log.debug("{} encode to {}", this, getChannelState().getChannelRemoteAddress());
         }
         send(PeerService.encodePeer(getChannelMaster(), getChannelState()));
         sendComplete();

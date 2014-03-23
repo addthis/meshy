@@ -20,6 +20,7 @@ import java.io.OutputStream;
 import com.addthis.basis.util.Bytes;
 
 import com.addthis.meshy.ChannelMaster;
+import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.SourceHandler;
 
@@ -42,15 +43,20 @@ public class MessageSource extends SourceHandler implements OutputSender, TopicS
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) {
+    public void receive(ChannelState state, int length, ChannelBuffer buffer) {
         InputStream in = Meshy.getInput(length, buffer);
         String topic = null;
         try {
             topic = Bytes.readString(in);
             listener.receiveMessage(topic, in);
         } catch (Exception ex) {
-            log.warn("fail to receive to topic=" + topic + " listener=" + listener + " in=" + in + " len-" + length + " buf=" + buffer + " ex=" + ex);
+            log.warn("fail to receive to topic={} listener={} in={} len-{} buf={}",
+                    topic, listener, in, length, buffer, ex);
         }
+    }
+
+    @Override
+    public void channelClosed(ChannelState state) {
     }
 
     @Override
