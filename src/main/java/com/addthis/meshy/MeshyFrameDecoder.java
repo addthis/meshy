@@ -25,11 +25,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy.service.message;
+
+package com.addthis.meshy;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 
-interface OutputSender {
+class MeshyFrameDecoder extends LengthFieldBasedFrameDecoder {
 
-    public boolean send(ByteBuf data);
+    public MeshyFrameDecoder(int maxFrameLength, int lengthFieldOffset, int lengthFieldLength) {
+        super(maxFrameLength, lengthFieldOffset, lengthFieldLength);
+    }
+
+    @Override
+    protected ByteBuf extractFrame(ChannelHandlerContext ctx, ByteBuf buffer, int index, int length) {
+        return buffer.slice(index, length);
+    }
+
 }

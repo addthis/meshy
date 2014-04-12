@@ -34,7 +34,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.CRC32;
@@ -43,6 +42,7 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
 
+import com.addthis.meshy.filesystem.VirtualFileSystem;
 import com.addthis.meshy.service.message.InternalHandler;
 import com.addthis.meshy.service.message.MessageFileSystem;
 import com.addthis.meshy.service.peer.PeerService;
@@ -51,16 +51,14 @@ import com.addthis.meshy.service.peer.PeerSource;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFactory;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 
 public class MeshyServer extends Meshy {
@@ -125,8 +123,8 @@ public class MeshyServer extends Meshy {
                 for (String vm : Strings.splitArray(registerVMs, ",")) {
                     try {
                         load.add((VirtualFileSystem) (Class.forName(vm).newInstance()));
-                    } catch (Throwable t) {
-                        log.error("failure loading VM " + vm, t);
+                    } catch (Exception t) {
+                        log.error("failure loading VM {}", vm, t);
                     }
                 }
             }
@@ -136,13 +134,12 @@ public class MeshyServer extends Meshy {
         return vfsList;
     }
 
-    private final int serverPort;
+    final int serverPort;
+    final MeshyServerGroup group;
     private final File rootDir;
     private final VirtualFileSystem filesystems[];
-    private final ChannelFactory serverFactory;
     private final List<Channel> serverChannel;
     private final String serverUuid;
-    private final MeshyServerGroup group;
 
     /**
      * This guard is used to ensure the close() method
@@ -175,7 +172,8 @@ public class MeshyServer extends Meshy {
 
     private InetSocketAddress serverLocal;
     private String serverNetIf;
-    private boolean initialized;
+    // TODO: revisit this one's visibility
+    boolean initialized;
 
     /**
      * server
@@ -195,25 +193,21 @@ public class MeshyServer extends Meshy {
         this.rootDir = rootDir;
         this.filesystems = loadFileSystems(rootDir);
         group.join(this);
-        serverFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
-        ServerBootstrap bootstrap = new ServerBootstrap(serverFactory);
-        bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                return Channels.pipeline(new MeshyChannelHandler());
-            }
-        });
-        // for parent channel
-        bootstrap.setOption("connectTimeoutMillis", 30000);
-        bootstrap.setOption("reuseAddress", true);
-        bootstrap.setOption("backlog", 1024);
-        // for children channels
-        bootstrap.setOption("child.tcpNoDelay", true);
-        bootstrap.setOption("child.keepAlive", true);
+        ServerBootstrap bootstrap = new ServerBootstrap()
+                .group(workerGroup)
+                .channel(NioServerSocketChannel.class)
+                .option(ChannelOption.SO_BACKLOG, 1024)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
+                .option(ChannelOption.SO_REUSEADDR, true)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .childOption(ChannelOption.TCP_NODELAY, true)
+                .childHandler(new MeshyChannelnitializer(MeshyServer.this));
+
         serverChannel = new LinkedList<>();
         /* bind to one or more interfaces, if supplied, otherwise all */
         if (netif == null || netif.length == 0) {
             serverLocal = new InetSocketAddress(port);
-            serverChannel.add(bootstrap.bind(serverLocal));
+            serverChannel.add(bootstrap.bind(serverLocal).channel()); //async
         } else {
             for (String net : netif) {
                 NetworkInterface nicif = NetworkInterface.getByName(net);
@@ -228,7 +222,7 @@ public class MeshyServer extends Meshy {
                         continue;
                     }
                     serverLocal = new InetSocketAddress(inAddr, port);
-                    serverChannel.add(bootstrap.bind(serverLocal));
+                    serverChannel.add(bootstrap.bind(serverLocal).channel()); //async
                 }
                 serverNetIf = net;
             }
@@ -338,7 +332,7 @@ public class MeshyServer extends Meshy {
         /* servers peer with other servers once a channel comes up */
         // assign unique id (local or remote inferred)
         channelState.setName("temp-uuid-" + nextSession.incrementAndGet());
-        InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
+        InetSocketAddress address = (InetSocketAddress) channel.remoteAddress();
         if (needsPeering.remove(address)) {
             log.debug("{} >>> starting peering with {}", MeshyServer.this, address);
             new PeerSource(this, channelState.getName());
@@ -350,22 +344,17 @@ public class MeshyServer extends Meshy {
         closeSemaphore.acquireUninterruptibly();
         try {
             if (!closeGuard.getAndSet(true)) {
-                log.debug(this + " exiting");
+                log.debug("{} exiting", this);
                 super.close();
-                if (serverFactory != null) {
-                    serverFactory.releaseExternalResources();
-                }
                 if (serverChannel != null) {
                     for (Channel ch : serverChannel) {
                         ch.close().awaitUninterruptibly();
                     }
                 }
-                try {
-                    Runtime.getRuntime().removeShutdownHook(shutdownThread);
-                } catch (IllegalStateException ex) {
-                    // the JVM is shutting down
-                }
+                Runtime.getRuntime().removeShutdownHook(shutdownThread);
             }
+        } catch (IllegalStateException ex) {
+            // the JVM is shutting down
         } finally {
             closeSemaphore.release();
         }

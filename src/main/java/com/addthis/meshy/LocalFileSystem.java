@@ -26,6 +26,11 @@ import java.nio.file.Path;
 import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
 
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

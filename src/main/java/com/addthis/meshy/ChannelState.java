@@ -23,26 +23,26 @@ import com.addthis.basis.util.Parameter;
 
 import com.google.common.base.Objects;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.channel.ChannelStateEvent;
-import org.jboss.netty.channel.MessageEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
 
 
 /**
  * TODO implement pinger to teardown "dead" peers
  */
-public class ChannelState {
+public class ChannelState extends ChannelDuplexHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ChannelState.class);
     private static final int excessiveTargets = Parameter.intValue("meshy.channel.report.targets", 2000);
     private static final int excessiveSources = Parameter.intValue("meshy.channel.report.sources", 2000);
-
-    protected static final BufferAllocator bufferFactory = new BufferAllocator();
 
     public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
 
@@ -50,26 +50,27 @@ public class ChannelState {
         ReadType, ReadSession, ReadLength, ReadData
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, byte[] data) {
-        return allocateSendBuffer(type, session, data, 0, data.length);
+
+    public static ByteBuf allocateSendBuffer(int type, int session, ByteBuf data) {
+        return allocateSendBuffer(type, session, data, 0, data.readableBytes());
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, byte[] data, int off, int len) {
-        ChannelBuffer sendBuffer = allocateSendBuffer(type, session, len);
+    public static ByteBuf allocateSendBuffer(int type, int session, ByteBuf data, int off, int len) {
+        ByteBuf sendBuffer = allocateSendBuffer(type, session, len);
         sendBuffer.writeBytes(data, off, len);
         return sendBuffer;
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
+    public static ByteBuf allocateSendBuffer(int type, int session, int length) {
+        ByteBuf sendBuffer = PooledByteBufAllocator.DEFAULT.buffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
         return sendBuffer;
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, ChannelBuffer from, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
+    public static ByteBuf allocateSendBuffer(int type, int session, ByteBuf from, int length) {
+        ByteBuf sendBuffer = PooledByteBufAllocator.DEFAULT.buffer(MESHY_BYTE_OVERHEAD + length);
         sendBuffer.writeInt(type);
         sendBuffer.writeInt(session);
         sendBuffer.writeInt(length);
@@ -77,16 +78,11 @@ public class ChannelState {
         return sendBuffer;
     }
 
-    public static void returnSendBuffer(ChannelBuffer buffer) {
-        bufferFactory.returnBuffer(buffer);
-    }
-
     private final ConcurrentMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMapV8<>();
     private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMapV8<>();
     private final ChannelMaster master;
     private final Channel channel;
 
-    private ChannelBuffer buffer = bufferFactory.allocateBuffer(16384);
     private READMODE mode = READMODE.ReadType;
     // last session id for which a handler was created on this channel. should always be > than the last
     private int type;
@@ -130,14 +126,14 @@ public class ChannelState {
         }
     }
 
-    public boolean send(final ChannelBuffer sendBuffer, final SendWatcher watcher, final int reportBytes) {
+    public boolean send(final ByteBuf sendBuffer, final SendWatcher watcher, final int reportBytes) {
         if (channel.isOpen()) {
             ChannelFuture future = channel.write(sendBuffer);
             future.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture ignored) throws Exception {
                     master.sentBytes(reportBytes);
-                    returnSendBuffer(sendBuffer);
+                    sendBuffer.release();
                     if (watcher != null) {
                         watcher.sendFinished(reportBytes);
                     }
@@ -153,7 +149,7 @@ public class ChannelState {
                  * example is StreamService when EOF framing tells the
                  * client we're done before sendComplete() framing does.
                  */
-                log.info("{} writing [{}] to dead channel", this, reportBytes);
+                log.info(this + " writing [" + reportBytes + "] to dead channel");
                 if (watcher != null) {
                     /**
                      * for accounting, rate limiting reasons, we have to report these as sent.
@@ -188,7 +184,7 @@ public class ChannelState {
     }
 
     public InetSocketAddress getChannelRemoteAddress() {
-        return channel != null ? (InetSocketAddress) channel.getRemoteAddress() : null;
+        return channel != null ? (InetSocketAddress) channel.remoteAddress() : null;
     }
 
     public ChannelMaster getChannelMaster() {
@@ -212,12 +208,8 @@ public class ChannelState {
         }
     }
 
-    public void channelConnected(ChannelStateEvent e) {
-        log.debug("{} channel:connect [{}] {}", this, this.hashCode(), e);
-    }
-
-    public void channelClosed(ChannelStateEvent e) throws Exception {
-        log.debug("{} channel:close [{}] {}", this, this.hashCode(), e);
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         for (Map.Entry<Integer, SessionHandler> entry : targetHandlers.entrySet()) {
             entry.getValue().receiveComplete(this, entry.getKey());
         }
@@ -226,107 +218,65 @@ public class ChannelState {
         }
     }
 
-    public void messageReceived(MessageEvent msg) {
+
+    /**
+     * Invoked when the current {@link Channel} has read a message from the peer.
+     */
+    public void channelRead(Object msg) {
         log.trace("{} recv msg={}", this, msg);
-        final ChannelBuffer in = (ChannelBuffer) msg.getMessage();
-        master.recvBytes(in.readableBytes());
-        if (buffer.writableBytes() >= in.readableBytes()) {
-            buffer.writeBytes(in);
+        final ByteBuf buffer = (ByteBuf) msg;
+        master.recvBytes(buffer.readableBytes());
+        // zero signifies a reply to a source
+        int type = buffer.readInt();
+        int session = buffer.readInt();
+        // zero length signifies end of session
+        int length = buffer.readInt();
+        SessionHandler handler = null;
+        if (type == MeshyConstants.KEY_RESPONSE) {
+            handler = sourceHandlers.get(session);
         } else {
-            ChannelBuffer out = bufferFactory.allocateBuffer(in.readableBytes() + buffer.readableBytes());
-            out.writeBytes(buffer);
-            out.writeBytes(in);
-            returnSendBuffer(buffer);
-            buffer = out;
-            log.debug("{} recv.reallocate: {}", this, out.writableBytes());
-        }
-        loop:
-        while (true) {
-            switch (mode) {
-                // zero signifies a reply to a source
-                case ReadType:
-                    if (buffer.readableBytes() < 4) {
-                        break loop;
+            handler = targetHandlers.get(session);
+            if (handler == null && master instanceof MeshyServer) {
+                handler = master.createHandler(type);
+                ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
+                if (log.isDebugEnabled()) {
+                    log.debug(this + " createHandler " + handler + " session=" + session);
+                }
+                if (targetHandlers.put(session, handler) != null) {
+                    log.debug("clobbered session " + session + " with " + handler);
+                }
+                if (targetHandlers.size() >= excessiveTargets) {
+                    log.debug("excessive targets reached, current targetHandlers = " + targetHandlers.size());
+                    if (log.isTraceEnabled()) {
+                        debugSessions();
                     }
-                    type = buffer.readInt();
-                    mode = READMODE.ReadSession;
-                    continue;
-                case ReadSession:
-                    if (buffer.readableBytes() < 4) {
-                        break loop;
-                    }
-                    session = buffer.readInt();
-                    mode = READMODE.ReadLength;
-                    continue;
-                    // zero length signifies end of session
-                case ReadLength:
-                    if (buffer.readableBytes() < 4) {
-                        break loop;
-                    }
-                    length = buffer.readInt();
-                    mode = READMODE.ReadData;
-                    continue;
-                case ReadData:
-                    int readable = buffer.readableBytes();
-                    if (readable < length) {
-                        break loop;
-                    }
-                    SessionHandler handler = null;
-                    if (type == MeshyConstants.KEY_RESPONSE) {
-                        handler = sourceHandlers.get(session);
-                    } else {
-                        handler = targetHandlers.get(session);
-                        if ((handler == null) && (master instanceof MeshyServer)) {
-                            if (type != MeshyConstants.KEY_EXISTING) {
-                                handler = master.createHandler(type);
-                                ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
-                                log.debug("{} createHandler {} session={}", this, handler, session);
-                                if (targetHandlers.put(session, handler) != null) {
-                                    log.debug("clobbered session {} with {}", session, handler);
-                                }
-                                if (targetHandlers.size() >= excessiveTargets) {
-                                    log.debug("excessive targets reached, current targetHandlers = {}", targetHandlers.size());
-                                    if (log.isTraceEnabled()) {
-                                        debugSessions();
-                                    }
-                                }
-                            } else {
-                                log.debug("Ignoring bad handler creation request for session {} type {}",
-                                        session, type); // happens with fast streams and send-mores
-                            }
-                        }
-                    }
-                    if (handler != null) {
-                        try {
-                            if (length == 0) {
-                                handler.receiveComplete(this, session);
-                                if (type == MeshyConstants.KEY_RESPONSE) {
-                                    sourceHandlers.remove(session);
-                                    log.debug("{} dropSession session={}", this, session);
-                                } else {
-                                    targetHandlers.remove(session);
-                                }
-                            } else {
-                                handler.receive(this, session, length, buffer);
-                            }
-                        } catch (Exception ex) {
-                            log.error("messageReceived error", ex);
-                        }
-                    }
-                    int read = readable - buffer.readableBytes();
-                    if (read < length) {
-                        if (handler != null || log.isDebugEnabled()) {
-                            log.debug("{} recv type={} handler={} ssn={} did not consume all bytes (read={} of {})",
-                                    this, type, handler, session, read, length);
-                        }
-                        buffer.skipBytes(length - read);
-                    }
-                    mode = READMODE.ReadType;
-                    continue;
-                default:
-                    throw new RuntimeException("invalid state");
+                }
             }
         }
-        buffer.discardReadBytes();
+        if (handler != null) {
+            try {
+                if (length == 0) {
+                    handler.receiveComplete(this, session);
+                    if (type == MeshyConstants.KEY_RESPONSE) {
+                        sourceHandlers.remove(session);
+                        if (log.isDebugEnabled()) {
+                            log.debug(this + " dropSession session=" + session);
+                        }
+                    } else {
+                        targetHandlers.remove(session);
+                    }
+                } else {
+                    handler.receive(this, session, buffer);
+                }
+            } catch (Exception ex) {
+                log.warn("messageReceived error", ex);
+            }
+        }
+        int unread = buffer.readableBytes();
+        if (unread > 0) {
+            if ((handler != null) || log.isDebugEnabled()) {
+                log.debug(this + " recv type=" + type + " handler=" + handler + " ssn=" + session + " did not consume all bytes (unread=" + unread + " of " + length + ")");
+            }
+        }
     }
 }

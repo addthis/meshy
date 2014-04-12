@@ -11,20 +11,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.addthis.meshy.service.message;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 
 import java.util.HashMap;
 
-import com.addthis.basis.util.Bytes;
-
 import com.addthis.meshy.MeshyClient;
+import com.addthis.meshy.util.ByteBufs;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 
 public class MessageFileProvider implements TopicListener {
@@ -45,10 +58,8 @@ public class MessageFileProvider implements TopicListener {
         }
         synchronized (listeners) {
             listeners.put(fileName, listener);
-            OutputStream out = source.sendMessage(MessageFileSystem.MFS_ADD);
-            try {
-                Bytes.writeString(fileName, out);
-                out.close();
+            try (SendOnCloseByteBufHolder out = source.sendMessage(MessageFileSystem.MFS_ADD)) {
+                ByteBufs.writeString(fileName, out.content());
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -57,10 +68,8 @@ public class MessageFileProvider implements TopicListener {
 
     public void deleteListener(String fileName) {
         synchronized (listeners) {
-            OutputStream out = source.sendMessage(MessageFileSystem.MFS_DEL);
-            try {
-                Bytes.writeString(fileName, out);
-                out.close();
+            try (SendOnCloseByteBufHolder out = source.sendMessage(MessageFileSystem.MFS_DEL)) {
+                ByteBufs.writeString(fileName, out.content());
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
@@ -69,20 +78,20 @@ public class MessageFileProvider implements TopicListener {
     }
 
     @Override
-    public void receiveMessage(String fileName, InputStream in) throws IOException {
+    public void receiveMessage(String fileName, ByteBuf in) throws IOException {
         MessageListener listener = null;
         synchronized (listeners) {
             listener = listeners.get(fileName);
         }
         if (listener != null) {
-            String topic = Bytes.readString(in);
+            String topic = ByteBufs.readString(in);
             HashMap<String, String> options = null;
-            int count = Bytes.readInt(in);
+            int count = in.readInt();
             if (count > 0) {
                 options = new HashMap<>(count);
                 while (count > 0) {
                     count--;
-                    options.put(Bytes.readString(in), Bytes.readString(in));
+                    options.put(ByteBufs.readString(in), ByteBufs.readString(in));
                 }
             }
             listener.requestContents(fileName, options, source.sendMessage(topic));

@@ -24,9 +24,9 @@ import com.addthis.meshy.LocalFileSystem;
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TestMesh;
-import com.addthis.meshy.VirtualFileFilter;
-import com.addthis.meshy.VirtualFileInput;
-import com.addthis.meshy.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileReference;
 
 import org.junit.After;
 import org.junit.Before;

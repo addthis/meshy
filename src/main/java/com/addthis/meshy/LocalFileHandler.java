@@ -17,6 +17,9 @@ import java.io.File;
 
 import java.util.Iterator;
 
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+
 
 public interface LocalFileHandler {
 

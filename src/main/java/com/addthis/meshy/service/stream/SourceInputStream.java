@@ -11,9 +11,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.addthis.meshy.service.stream;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
@@ -24,10 +37,10 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelState;
+import com.addthis.meshy.util.ByteBufs;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
@@ -35,6 +48,9 @@ import com.yammer.metrics.core.Histogram;
 import com.yammer.metrics.core.Timer;
 
 import org.slf4j.Logger;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 
 /**
  * creates an input stream from a blocking finderQueue of byte[]
@@ -53,12 +69,12 @@ public class SourceInputStream extends InputStream {
     private static final Logger log = StreamService.log;
 
     private final AtomicInteger expectingBytes = new AtomicInteger(0);
-    private final LinkedBlockingDeque<byte[]> deque = new LinkedBlockingDeque<>();
+    private final LinkedBlockingDeque<ByteBuf> deque = new LinkedBlockingDeque<>();
     private final StreamSource source;
     private final int maxBufferSize;
     private final int refillThreshold;
-    private ByteArrayInputStream current;
-    private byte[] currentData;
+    private ByteBufInputStream current;
+    private ByteBuf currentData;
     private boolean done = false;
     private boolean primed = false;
 
@@ -93,12 +109,12 @@ public class SourceInputStream extends InputStream {
         return maxBufferSize;
     }
 
-    void feed(byte data[]) {
+    void feed(ByteBuf data) {
         try {
             if (log.isTraceEnabled()) {
-                log.trace("{} feed={}", this, data.length);
+                log.trace("{} feed={}", this, data.readableBytes());
             }
-            basHisto.update(data.length);
+            basHisto.update(data.readableBytes());
             deque.put(data);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -131,7 +147,7 @@ public class SourceInputStream extends InputStream {
             if (log.isTraceEnabled()) {
                 log.trace("{} fill c={}", this, current != null ? current.available() : "empty");
             }
-            byte data[] = null;
+            ByteBuf data = null;
             try {
                 if (!primed) {
                     requestMoreData();
@@ -159,7 +175,7 @@ public class SourceInputStream extends InputStream {
                     }
                 }
 
-                int sizeIncludingOverhead = data.length + ChannelState.MESHY_BYTE_OVERHEAD
+                int sizeIncludingOverhead = data.readableBytes() + ChannelState.MESHY_BYTE_OVERHEAD
                                             + StreamService.STREAM_BYTE_OVERHEAD;
 
                 // returns previous value
@@ -179,7 +195,7 @@ public class SourceInputStream extends InputStream {
                         requestMoreData(overflowRecoverCount);
                     }
                 }
-                log.trace("{} fill take={}", this, data.length);
+                log.trace("{} fill take={}", this, data.readableBytes());
             } catch (InterruptedException ex) {
                 log.warn("{} close on stream service interrupted", this);
                 close();
@@ -192,18 +208,18 @@ public class SourceInputStream extends InputStream {
             }
             if (data == StreamService.FAIL_BYTES) {
                 close();
-                byte[] error = deque.poll();
+                ByteBuf error = deque.poll();
                 String errorMessage;
-                errorMessage = error == null ? "no failure message available." : Bytes.toString(error);
+                errorMessage = error == null ? "no failure message available." : ByteBufs.toString(error);
                 throw new IOException(errorMessage);
-            } else if (data.length == 0) {
+            } else if (data.readableBytes() == 0) {
                 log.trace("{} fill exit on 0 bytes", this);
                 currentData = data;
                 done = true;
                 return false;
             }
             if (blocking) {
-                current = new ByteArrayInputStream(data);
+                current = new ByteBufInputStream(data);
             } else {
                 currentData = data;
             }
@@ -230,7 +246,7 @@ public class SourceInputStream extends InputStream {
      * @return - a byte array if data is available or null if no data is currently available.
      * @throws java.io.IOException
      */
-    public byte[] poll() throws IOException {
+    public ByteBuf poll() throws IOException {
         return poll(-1, null);
     }
 
@@ -242,10 +258,10 @@ public class SourceInputStream extends InputStream {
      * @return - a byte array if data is available or null if no data is currently available.
      * @throws java.io.IOException
      */
-    public byte[] poll(long wait, TimeUnit timeUnit) throws IOException {
+    public ByteBuf poll(long wait, TimeUnit timeUnit) throws IOException {
         // response from fill is ignored because in async mode the call is ignored
         fill(false, wait, timeUnit);
-        byte[] data = currentData;
+        ByteBuf data = currentData;
         currentData = null;
         return data;
     }
@@ -260,12 +276,12 @@ public class SourceInputStream extends InputStream {
     }
 
     @Override
-    public int read(byte buf[]) throws IOException {
+    public int read(byte[] buf) throws IOException {
         return read(buf, 0, buf.length);
     }
 
     @Override
-    public int read(byte buf[], int off, int len) throws IOException {
+    public int read(byte[] buf, int off, int len) throws IOException {
         if (fill(true)) {
             return current.read(buf, off, len);
         } else {
@@ -274,13 +290,13 @@ public class SourceInputStream extends InputStream {
     }
 
     @Override
-    public int available() {
+    public int available() throws IOException {
         if (current != null) {
             return current.available();
         }
-        byte peek[] = deque.peek();
+        ByteBuf peek = deque.peek();
         /* length 0 is valid for EOF packets, so returning 1 is wrong in that case */
-        return peek != null ? peek.length : 0;
+        return peek != null ? peek.readableBytes() : 0;
     }
 
     @Override

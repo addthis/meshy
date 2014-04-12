@@ -14,19 +14,17 @@
 package com.addthis.meshy.service.message;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.addthis.basis.util.Bytes;
 
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TestMesh;
+import com.addthis.meshy.util.ByteBufs;
 
 import org.junit.Test;
 
+import io.netty.buffer.ByteBuf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -42,10 +40,10 @@ public class TestMessageService extends TestMesh {
         /** connect client and set up listener */
         TopicSender mss = new MessageSource(client, new TopicListener() {
             @Override
-            public void receiveMessage(String topic, InputStream message) throws IOException {
+            public void receiveMessage(String topic, ByteBuf message) throws IOException {
                 log.info("client recv: {}", topic);
                 assertEquals("def", topic);
-                assertEquals("67890", Bytes.readString(message));
+                assertEquals("67890", ByteBufs.readString(message));
                 clientRecv.set(true);
             }
 
@@ -57,12 +55,12 @@ public class TestMessageService extends TestMesh {
         /** register server-side listener */
         MessageTarget.registerListener("abc", new TargetListener() {
             @Override
-            public void receiveMessage(TopicSender target, String topic, InputStream message) throws IOException {
+            public void receiveMessage(TopicSender target, String topic, ByteBuf message) throws IOException {
                 log.info("server recv: {}", topic);
                 assertEquals("abc", topic);
-                assertEquals("12345", Bytes.readString(message));
-                OutputStream out = target.sendMessage("def");
-                Bytes.writeString("67890", out);
+                assertEquals("12345", ByteBufs.readString(message));
+                SendOnCloseByteBufHolder out = target.sendMessage("def");
+                ByteBufs.writeString("67890", out.content());
                 out.close();
                 serverRecv.set(true);
             }
@@ -73,8 +71,8 @@ public class TestMessageService extends TestMesh {
             }
         });
         /** ping test */
-        OutputStream out = mss.sendMessage("abc");
-        Bytes.writeString("12345", out);
+        SendOnCloseByteBufHolder out = mss.sendMessage("abc");
+        ByteBufs.writeString("12345", out.content());
         out.close();
         /** wait for quiet */
         waitQuiescent();

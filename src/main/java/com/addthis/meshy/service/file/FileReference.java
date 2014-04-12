@@ -11,17 +11,33 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.addthis.meshy.service.file;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 import com.addthis.basis.util.Bytes;
 
-import com.addthis.meshy.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.util.ByteBufs;
 
 import com.google.common.base.Objects;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 
 public class FileReference {
 
@@ -41,8 +57,8 @@ public class FileReference {
         this(prefix + '/' + ref.getName(), ref.getLastModified(), ref.getLength());
     }
 
-    public FileReference(final byte[] data) throws IOException {
-        ByteArrayInputStream in = new ByteArrayInputStream(data);
+    public FileReference(ByteBuf data) throws IOException {
+        ByteBufInputStream in = new ByteBufInputStream(data);
         name = Bytes.readString(in);
         lastModified = Bytes.readLength(in);
         size = Bytes.readLength(in);
@@ -61,18 +77,17 @@ public class FileReference {
         return hostUUID;
     }
 
-    byte[] encode(String uuid) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream(name.length() * 2 + 12);
-            Bytes.writeString(name, out);
-            Bytes.writeLength(lastModified, out);
-            Bytes.writeLength(size, out);
-            Bytes.writeString(uuid != null ? uuid : hostUUID, out);
-            return out.toByteArray();
-        } catch (IOException ie) {
-            //using ByteArrayOutputStream. Cant actually throw these
-            return null;
-        }
+    void encode(String uuid, ByteBuf to) {
+        to.writeBytes(ByteBufs.fromString(name));
+        ByteBufs.writeLength(lastModified, to);
+        ByteBufs.writeLength(size, to);
+        to.writeBytes(ByteBufs.fromString((uuid != null) ? uuid : hostUUID));
+    }
+
+    ByteBuf encode(String uuid) {
+        ByteBuf to = ByteBufs.meshAlloc.buffer();
+        encode(uuid, to);
+        return to;
     }
 
     @Override

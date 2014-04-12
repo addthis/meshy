@@ -11,10 +11,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy.service.host;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.addthis.meshy.service.host;
 
 import java.net.InetSocketAddress;
 
@@ -24,15 +35,14 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import com.addthis.basis.util.Bytes;
-
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
-import com.addthis.meshy.Meshy;
-import com.addthis.meshy.service.peer.PeerService;
 import com.addthis.meshy.SourceHandler;
+import com.addthis.meshy.service.peer.PeerService;
+import com.addthis.meshy.util.ByteBufs;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
+
 
 public class HostSource extends SourceHandler {
 
@@ -50,12 +60,12 @@ public class HostSource extends SourceHandler {
 
     public void sendRequest() {
         try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            Bytes.writeInt(peerAdd.size(), out);
+            ByteBuf buf = ByteBufs.quickAlloc();
+            buf.writeInt(peerAdd.size());
             for (String peer : peerAdd) {
-                Bytes.writeString(peer, out);
+                ByteBufs.writeString(peer, buf);
             }
-            send(out.toByteArray());
+            send(buf);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -75,12 +85,11 @@ public class HostSource extends SourceHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
-        ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
-        int hosts = Bytes.readInt(in);
+    public void receive(ChannelState state, ByteBuf buffer) throws Exception {
+        int hosts = buffer.readInt();
         while (hosts-- > 0) {
-            String uuid = Bytes.readString(in);
-            InetSocketAddress address = PeerService.decodeAddress(in);
+            String uuid = ByteBufs.readString(buffer);
+            InetSocketAddress address = PeerService.decodeAddress(buffer);
             hostList.add(new HostNode(uuid, address));
             hostMap.put(uuid, address);
         }

@@ -23,11 +23,13 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.filesystem.VirtualFileInput;
+
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 
 /**
- * simple wrapper.  does not attempt to follow nextBytes() wait
+ * simple wrapper.  does not attempt to follow nextMessage() wait
  * contract.  assumption is this is wrapping a file input or
  * similar that won't block for long.
  */
@@ -76,7 +78,7 @@ public class InputStreamWrapper implements VirtualFileInput {
     }
 
     @Override
-    public byte[] nextBytes(long wait) {
+    public Object nextMessage(long wait) {
         if (done) {
             return null;
         }

@@ -34,7 +34,7 @@ public interface ChannelMaster {
      */
     void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid);
 
-    Collection<ChannelState> getChannels(String nameFilter);
+    Collection<ChannelState> getChannelStates(String nameFilter);
 
     // metrics
 

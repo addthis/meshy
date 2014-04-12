@@ -19,6 +19,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileReference;
 import com.addthis.muxy.ReadMuxFile;
 import com.addthis.muxy.ReadMuxFileDirectory;
 import com.addthis.muxy.ReadMuxFileDirectoryCache;

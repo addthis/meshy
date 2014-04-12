@@ -11,22 +11,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy.service.message;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.addthis.meshy.service.message;
 
 import java.util.HashMap;
 
-import com.addthis.basis.util.Bytes;
-
-import com.addthis.meshy.Meshy;
 import com.addthis.meshy.TargetHandler;
+import com.addthis.meshy.util.ByteBufs;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * MessageService allows transient client connections to offer services and extensions
@@ -65,9 +74,8 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
-        InputStream in = Meshy.getInput(length, buffer);
-        String topic = Bytes.readString(in);
+    public void receive(ByteBuf in) throws Exception {
+        String topic = ByteBufs.readString(in);
         synchronized (targetListeners) {
             TargetListener listener = targetListeners.get(topic);
             if (listener != null) {
@@ -86,11 +94,11 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     }
 
     @Override
-    public OutputStream sendMessage(String topic) {
+    public SendOnCloseByteBufHolder sendMessage(String topic) {
         try {
-            ByteArrayOutputStream out = new SendOnCloseOutputStream(this, 4096);
-            Bytes.writeString(topic, out);
-            return out;
+            SendOnCloseByteBufHolder outHolder = new SendOnCloseByteBufHolder(this, 4096);
+            ByteBufs.writeString(topic, outHolder.content());
+            return outHolder;
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }

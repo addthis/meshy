@@ -13,7 +13,6 @@
  */
 package com.addthis.meshy;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -92,14 +91,13 @@ public class MeshyServerGroup {
     }
 
     private void emitStats() {
-        BufferAllocator.Stats bs = ChannelState.bufferFactory.getStats();
         GCSummary gc = gcMetrics.update(Meshy.vmMetrics);
         StreamStats ss = new StreamStats();
         FileStats fs = new FileStats();
 
         StringBuilder rep = new StringBuilder();
         rep.append("seqReads=");
-        rep.append(ss.seqRead); // number of sequential nextBytes from the same target
+        rep.append(ss.seqRead); // number of sequential nextMessage from the same target
         rep.append(" totalReads=");
         rep.append(ss.totalRead); // number of total reads across all targets
         rep.append(" bytesRead=");
@@ -147,26 +145,6 @@ public class MeshyServerGroup {
             rep.append(" mF=");
             rep.append(ReadMuxFileDirectoryCache.getCacheFileSize()); // muxy cached files
         }
-        if (BufferAllocator.ENABLED) {
-            rep.append(" bMC=");
-            rep.append(Meshy.numbers.format(bs.bufferMem)); // cached bytes
-            rep.append(" bML=");
-            rep.append(Meshy.numbers.format(bs.bufferOut)); // leased bytes
-            rep.append(" bLO=");
-            rep.append(Meshy.numbers.format(bs.leaseOut)); // leased buffers
-            rep.append(" bI=");
-            rep.append(bs.returns); // buffers returned to cache
-            rep.append(" bO=");
-            rep.append(bs.leases); // buffers leased from cache or created
-            rep.append(" bZ=");
-            rep.append(bs.sleeps); // sleeps b/c too many buffers outstanding
-            if (log.isDebugEnabled()) {
-                rep.append(" bP=");
-                rep.append(Arrays.toString(bs.poolSizes));
-                rep.append("-");
-                rep.append(Arrays.toString(bs.poolLeases));
-            }
-        }
 
         int bin = 0;
         int bout = 0;
@@ -200,7 +178,7 @@ public class MeshyServerGroup {
             }
         }
 
-        final boolean statsSkip = (bin | bout | bs.leaseOut | bs.leases | bs.returns) == 0;
+        final boolean statsSkip = (bin | bout) == 0;
         if (Meshy.THROTTLE_LOG && statsSkip && statsCountdown-- <= 0) {
             return;
         }

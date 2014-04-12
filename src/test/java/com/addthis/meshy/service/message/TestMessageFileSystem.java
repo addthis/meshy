@@ -15,17 +15,17 @@ package com.addthis.meshy.service.message;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 
 import java.util.Map;
 
 import com.addthis.basis.util.Bytes;
 
-import com.addthis.meshy.service.file.FileReference;
-import com.addthis.meshy.service.file.FileSource;
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TestMesh;
+import com.addthis.meshy.service.file.FileReference;
+import com.addthis.meshy.service.file.FileSource;
+import com.addthis.meshy.util.ByteBufs;
 
 import org.junit.Test;
 
@@ -46,9 +46,9 @@ public class TestMessageFileSystem extends TestMesh {
         MessageFileProvider provider = new MessageFileProvider(client);
         provider.setListener("/rpc.test/one.rpc", new MessageListener() {
             @Override
-            public void requestContents(String fileName, Map<String, String> options, OutputStream out) throws IOException {
+            public void requestContents(String fileName, Map<String, String> options, SendOnCloseByteBufHolder out) throws IOException {
                 /* this is the client rpc reply endpoint implementation */
-                Bytes.writeString("rpc.reply", out);
+                ByteBufs.writeString("rpc.reply", out.content());
                 /* bytes are accumulated and sent on close */
                 out.close();
             }

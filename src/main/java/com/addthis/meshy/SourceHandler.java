@@ -13,9 +13,7 @@
  */
 package com.addthis.meshy;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
@@ -25,16 +23,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.netty.DummyChannelGroup;
-
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.group.ChannelGroupFuture;
-import org.jboss.netty.channel.group.ChannelGroupFutureListener;
-import org.jboss.netty.channel.group.DefaultChannelGroupFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.ChannelGroupFuture;
+import io.netty.channel.group.ChannelGroupFutureListener;
 
 
 public abstract class SourceHandler implements SessionHandler {
@@ -87,7 +84,7 @@ public abstract class SourceHandler implements SessionHandler {
     private long readTime;
     private long readTimeout;
     private long completeTimeout;
-    private Set<Channel> channels;
+    private ChannelGroup channels;
 
     public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass) {
         this(master, targetClass, MeshyConstants.LINK_ALL);
@@ -128,7 +125,7 @@ public abstract class SourceHandler implements SessionHandler {
         return master;
     }
 
-    public void init(int session, int targetHandler, Set<Channel> group) {
+    public void init(int session, int targetHandler, ChannelGroup group) {
         this.readTime = JitterClock.globalTime();
         this.session = session;
         this.channels = group;
@@ -157,7 +154,7 @@ public abstract class SourceHandler implements SessionHandler {
                 if (sb.length() > 0) {
                     sb.append(",");
                 }
-                sb.append(channel.getRemoteAddress());
+                sb.append(channel.remoteAddress());
             }
         }
         return sb.toString();
@@ -165,40 +162,37 @@ public abstract class SourceHandler implements SessionHandler {
 
     @Override
     public boolean sendComplete() {
-        return send(MeshyConstants.EMPTY_BYTES, null);
+        return send(Unpooled.EMPTY_BUFFER, null);
     }
 
-    public boolean send(byte[] data) {
+    public boolean send(ByteBuf data) {
         return send(data, null);
     }
 
     @Override
-    public final boolean send(byte[] data, final SendWatcher watcher) {
-        synchronized (channels) {
-            if (channels.isEmpty()) {
-                return false;
-            }
+    public boolean send(ByteBuf data, SendWatcher watcher) {
+        return send(ChannelState.allocateSendBuffer(targetHandler, session, data), watcher);
+    }
 
-            int sendType = MeshyConstants.KEY_EXISTING;
-            if (sent.compareAndSet(false, true) || DISABLE_CREATION_FRAMES) {
-                sendType = targetHandler;
-            }
-
-            final ChannelBuffer buffer = ChannelState.allocateSendBuffer(sendType, session, data);
-            final int reportBytes = data.length;
+    private boolean send(final ByteBuf buffer, final SendWatcher watcher, final int reportBytes) {
+        if (log.isTraceEnabled()) {
+            log.trace(this + " send " + buffer.capacity() + " to " + channels.size());
+        }
+        if (!channels.isEmpty()) {
             final int peerCount = channels.size();
-
-            log.trace("{} send {} to {}", this, buffer.capacity(), peerCount);
-            List<ChannelFuture> futures = new ArrayList<>(peerCount);
-            for (Channel c : channels) {
-                futures.add(c.write(buffer.duplicate()));
+            if (sent.compareAndSet(false, true)) {
+                try {
+                    gate.acquire();
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
             }
-            ChannelGroupFuture future = new DefaultChannelGroupFuture(DummyChannelGroup.DUMMY, futures);
+            ChannelGroupFuture future = channels.writeAndFlush(buffer);
             future.addListener(new ChannelGroupFutureListener() {
                 @Override
                 public void operationComplete(ChannelGroupFuture future) throws Exception {
                     master.sentBytes(reportBytes * peerCount);
-                    ChannelState.returnSendBuffer(buffer);
+                    buffer.release();
                     if (watcher != null) {
                         watcher.sendFinished(reportBytes);
                     }
@@ -206,13 +200,14 @@ public abstract class SourceHandler implements SessionHandler {
             });
             return true;
         }
+        return false;
     }
 
     @Override
-    public void receive(ChannelState state, int receivingSession, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int receivingSession, ByteBuf buffer) throws Exception {
         this.readTime = JitterClock.globalTime();
-        log.debug("{} receive [{}] l={}", this, receivingSession, length);
-        receive(state, length, buffer);
+        log.debug("{} receive [{}]", this, receivingSession);
+        receive(state, buffer);
     }
 
     @Override
@@ -230,7 +225,8 @@ public abstract class SourceHandler implements SessionHandler {
         }
     }
 
-    private void receiveComplete(int completedSession) throws Exception {
+    @Override
+    public void receiveComplete(int completedSession) throws Exception {
         log.debug("{} receiveComplete.2 [{}]", this, completedSession);
         // ensure this is only called once
         if (complete.compareAndSet(false, true)) {
@@ -246,7 +242,7 @@ public abstract class SourceHandler implements SessionHandler {
         StringBuilder stringBuilder = new StringBuilder(10 * channels.size());
         synchronized (channels) {
             for (Channel channel : channels) {
-                stringBuilder.append(channel.getRemoteAddress().toString());
+                stringBuilder.append(channel.remoteAddress().toString());
             }
         }
         return stringBuilder.toString();
@@ -269,7 +265,7 @@ public abstract class SourceHandler implements SessionHandler {
 
     public abstract void channelClosed(ChannelState state);
 
-    public abstract void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception;
+    public abstract void receive(ChannelState state, ByteBuf in) throws Exception;
 
     public abstract void receiveComplete() throws Exception;
 }

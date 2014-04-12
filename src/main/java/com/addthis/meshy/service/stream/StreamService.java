@@ -18,14 +18,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.MeshyConstants;
-
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 import com.yammer.metrics.core.Meter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 
 public class StreamService {
@@ -50,8 +51,8 @@ public class StreamService {
     static final int MODE_FAIL = 2;
     static final int MODE_CLOSE = 3;
     static final int MODE_START_2 = 4; // passing options
-    static final byte[] CLOSE_BYTES = MeshyConstants.EMPTY_BYTES; // not used for reference comparison -- only length
-    static final byte[] FAIL_BYTES = new byte[0]; // used in same-vm reference pointer comparison
+    static final ByteBuf CLOSE_BYTES = Unpooled.EMPTY_BUFFER; // not used for reference comparison -- only length
+    static final ByteBuf FAIL_BYTES = Unpooled.compositeBuffer(); // used in same-vm reference pointer comparison
 
     // metrics -- some are also used in functional logic
     /* for enforcing MAX_OPEN_STREAMS */

@@ -13,7 +13,6 @@
  */
 package com.addthis.meshy;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 import java.net.InetSocketAddress;
@@ -26,14 +25,14 @@ import java.util.zip.CRC32;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-import com.addthis.basis.util.Bytes;
-
 import com.addthis.meshy.service.stream.SourceInputStream;
 import com.addthis.meshy.service.stream.StreamSource;
+import com.addthis.meshy.util.ByteBufs;
 
 import org.junit.Ignore;
 import org.junit.Test;
 
+import io.netty.buffer.ByteBuf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -133,32 +132,34 @@ public class TestStreamService extends TestMesh {
                 client = new MeshyClient("localhost", connectTo.getLocalAddress().getPort());
                 StreamSource stream = new StreamSource(client, readFrom.getUUID(), path, 0);
                 long time = System.nanoTime();
-                byte raw[];
+                ByteBuf raw;
                 if (async) {
                     SourceInputStream sourceInputStream = stream.getInputStream();
-                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    ByteBuf buf = ByteBufs.quickAlloc();
                     boolean done = false;
                     while (!done) {
-                        byte[] data = sourceInputStream.poll(100, TimeUnit.MILLISECONDS);
+                        ByteBuf data = sourceInputStream.poll(100, TimeUnit.MILLISECONDS);
                         if (data != null) {
-                            if (data.length == 0) {
+                            if (data.readableBytes() == 0) {
                                 done = true;
                             } else {
-                                bos.write(data);
+                                buf.writeBytes(data);
+                                data.release();
                             }
                         }
 
                     }
-                    raw = bos.toByteArray();
+                    raw = buf;
                 } else {
-                    raw = Bytes.readFully(stream.getInputStream());
+                    raw = ByteBufs.readFully(stream.getInputStream());
                 }
                 CRC32 crc = new CRC32();
-                crc.update(raw);
+                byte[] rawBytes = ByteBufs.toBytes(raw);
+                crc.update(rawBytes);
                 log.info("[{}] read [{}] = [{}:{}] in ({}ns)",
                         connectTo.getLocalAddress().getPort(), readFrom.getLocalAddress().getPort(),
-                        raw.length, crc.getValue(), num.format(System.nanoTime() - time));
-                assertEquals(593366, raw.length);
+                        rawBytes.length, crc.getValue(), num.format(System.nanoTime() - time));
+                assertEquals(593366, rawBytes.length);
                 assertEquals(4164197206L, crc.getValue());
                 stream.waitComplete();
             } catch (Exception ex) {
@@ -198,18 +199,18 @@ public class TestStreamService extends TestMesh {
         /* simple direct test */
         StreamSource stream = new StreamSource(client, server1.getUUID(), "/a/abc.xml", 1024 * 10);
         SourceInputStream in = stream.getInputStream();
-        byte data[] = async ? readAsync(in) : Bytes.readFully(in);
-        assertEquals(data.length, 4);
-        log.info("{} server1:/a/abc.xml [{}]", logPrefix, data.length);
+        ByteBuf data = async ? readAsync(in) : ByteBufs.readFully(in);
+        assertEquals(data.readableBytes(), 4);
+        log.info("{} server1:/a/abc.xml [{}]", logPrefix, data.readableBytes());
         stream.waitComplete();
 
         /* multi-part "meshy" test */
         stream = new StreamSource(client, server1.getUUID(), "/c/hosts", 1024 * 10);
         in = stream.getInputStream();
-        data = async ? readAsync(in) : Bytes.readFully(in);
-        assertEquals(data.length, 593366);
+        data = async ? readAsync(in) : ByteBufs.readFully(in);
+        assertEquals(data.readableBytes(), 593366);
         assertEquals(MD5HOSTS, md5(data));
-        log.info("{} server1:/c/hosts [{}]", logPrefix, data.length);
+        log.info("{} server1:/c/hosts [{}]", logPrefix, data.readableBytes());
         stream.waitComplete();
 
         /* remote error test */
@@ -217,7 +218,7 @@ public class TestStreamService extends TestMesh {
         stream = new StreamSource(client, server1.getUUID(), "/" + randomString, 1024 * 10);
         try {
             in = stream.getInputStream();
-            data = async ? readAsync(in) : Bytes.readFully(in);
+            data = async ? readAsync(in) : ByteBufs.readFully(in);
             fail(logPrefix + " should not exist");
         } catch (Exception ex) {
             assertTrue(ex.getMessage().contains(randomString));
@@ -228,34 +229,35 @@ public class TestStreamService extends TestMesh {
         /* proxied file test */
         stream = new StreamSource(client, server2.getUUID(), "/abc.xml", 1024 * 10);
         in = stream.getInputStream();
-        data = async ? readAsync(in) : Bytes.readFully(in);
-        assertEquals(data.length, 4);
-        log.info("{} server2:/abc.xml [{}]", logPrefix, data.length);
+        data = async ? readAsync(in) : ByteBufs.readFully(in);
+        assertEquals(data.readableBytes(), 4);
+        log.info("{} server2:/abc.xml [{}]", logPrefix, data.readableBytes());
         stream.waitComplete();
 
         /* proxied "meshy" file test */
         stream = new StreamSource(client, server4.getUUID(), "/hosts", 1024 * 10);
         in = stream.getInputStream();
-        data = async ? readAsync(in) : Bytes.readFully(in);
-        assertEquals(data.length, 593366);
+        data = async ? readAsync(in) : ByteBufs.readFully(in);
+        assertEquals(data.readableBytes(), 593366);
         assertEquals(MD5HOSTS, md5(data));
-        log.info("{} server4:/hosts [{}]", logPrefix, data.length);
+        log.info("{} server4:/hosts [{}]", logPrefix, data.readableBytes());
         stream.waitComplete();
 
         /* mux'd file test */
         stream = new StreamSource(client, server1.getUUID(), "/mux/hosts", 1024 * 10);
         in = stream.getInputStream();
-        data = async ? readAsync(in) : Bytes.readFully(in);
-        assertEquals(data.length, 593366);
+        data = async ? readAsync(in) : ByteBufs.readFully(in);
+        assertEquals(data.readableBytes(), 593366);
         assertEquals(MD5HOSTS, md5(data));
-        log.info("{} server1:/mux/hosts [{}]", logPrefix, data.length);
+        log.info("{} server1:/mux/hosts [{}]", logPrefix, data.readableBytes());
         stream.waitComplete();
     }
 
-    private static long md5(final byte data[]) {
+    private static long md5(final ByteBuf data) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            md.digest(data);
+            byte[] rawData = ByteBufs.toBytes(data);
+            md.digest(rawData);
             long val = 0;
             for (byte b : md.digest()) {
                 val <<= 8;
@@ -267,21 +269,22 @@ public class TestStreamService extends TestMesh {
         }
     }
 
-    private static byte[] readAsync(SourceInputStream in) throws IOException {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    private static ByteBuf readAsync(SourceInputStream in) throws IOException {
+        ByteBuf buf = ByteBufs.quickAlloc();
         boolean done = false;
         while (!done) {
-            byte[] data = in.poll(100, TimeUnit.MILLISECONDS);
+            ByteBuf data = in.poll(100, TimeUnit.MILLISECONDS);
             if (data != null) {
-                if (data.length == 0) {
+                if (data.readableBytes() == 0) {
                     done = true;
                 } else {
-                    bos.write(data);
+                    buf.writeBytes(data);
+                    data.release();
                 }
             }
 
         }
-        return bos.toByteArray();
+        return buf;
     }
 
 }

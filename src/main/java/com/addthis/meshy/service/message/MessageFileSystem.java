@@ -11,22 +11,37 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.addthis.meshy.service.message;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Strings;
 
-import com.addthis.meshy.VirtualFileReference;
-import com.addthis.meshy.VirtualFileSystem;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
+import com.addthis.meshy.util.ByteBufs;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 
 public class MessageFileSystem implements VirtualFileSystem, TargetListener {
@@ -102,11 +117,11 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
     }
 
     @Override
-    public void receiveMessage(TopicSender target, String topic, InputStream in) throws IOException {
+    public void receiveMessage(TopicSender target, String topic, ByteBuf in) throws IOException {
         boolean add = topic.equals(MFS_ADD);
         boolean del = !add && topic.equals(MFS_DEL);
         if (add || del) {
-            String fullPath = Bytes.readString(in);
+            String fullPath = ByteBufs.readString(in);
             updatePath(target, fullPath, add);
         } else {
             log.warn("unhandled receive for topic=" + topic + " target=" + target);

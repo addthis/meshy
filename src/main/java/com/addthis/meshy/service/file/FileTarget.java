@@ -11,6 +11,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.addthis.meshy.service.file;
 
 import java.io.IOException;
@@ -25,7 +39,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -36,7 +49,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
 
@@ -46,9 +58,10 @@ import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TargetHandler;
-import com.addthis.meshy.VirtualFileFilter;
-import com.addthis.meshy.VirtualFileReference;
-import com.addthis.meshy.VirtualFileSystem;
+import com.addthis.meshy.filesystem.VirtualFileFilter;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
+import com.addthis.meshy.util.ByteBufs;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -59,11 +72,13 @@ import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.Timer;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelException;
+import io.netty.channel.group.ChannelGroup;
 
 public class FileTarget extends TargetHandler implements Runnable {
 
@@ -129,8 +144,8 @@ public class FileTarget extends TargetHandler implements Runnable {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
-        final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
+    public void receive(ByteBuf buffer) throws Exception {
+        final String msg = ByteBufs.toString(buffer);
         log.trace("{} recv scope={} msg={}", this, scope, msg);
         if (scope == null) {
             scope = msg;
@@ -404,7 +419,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                 if (sb.length() > 0) {
                     sb.append(',');
                 }
-                sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
+                sb.append(((InetSocketAddress) peer.remoteAddress()).getHostName());
             }
             return sb.toString();
         } catch (Exception e) {
@@ -487,12 +502,12 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
 
         @Override
-        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+        public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
             FileTarget.this.send(Meshy.getBytes(length, buffer));
         }
 
         @Override
-        public void init(int session, int targetHandler, Set<Channel> group) {
+        public void init(int session, int targetHandler, ChannelGroup group) {
             if (forwardMetaData) {
                 //directly get size from group since channels is not set yet;
                 forwardPeerList(group);

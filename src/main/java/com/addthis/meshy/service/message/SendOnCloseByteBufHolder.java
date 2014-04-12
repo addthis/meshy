@@ -27,9 +27,24 @@
  */
 package com.addthis.meshy.service.message;
 
-import io.netty.buffer.ByteBuf;
+import java.io.Closeable;
+import java.io.IOException;
 
-interface OutputSender {
+import com.addthis.meshy.util.ByteBufs;
 
-    public boolean send(ByteBuf data);
+import io.netty.buffer.DefaultByteBufHolder;
+
+class SendOnCloseByteBufHolder extends DefaultByteBufHolder implements Closeable {
+
+    private final OutputSender sender;
+
+    SendOnCloseByteBufHolder(OutputSender sender, int estSize) {
+        super(ByteBufs.meshAlloc.buffer(estSize));
+        this.sender = sender;
+    }
+
+    @Override
+    public void close() throws IOException {
+        sender.send(content());
+    }
 }

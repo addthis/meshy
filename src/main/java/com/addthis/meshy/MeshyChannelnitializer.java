@@ -25,11 +25,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy.service.message;
 
-import io.netty.buffer.ByteBuf;
+package com.addthis.meshy;
 
-interface OutputSender {
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
 
-    public boolean send(ByteBuf data);
+class MeshyChannelnitializer extends ChannelInitializer<Channel> {
+
+    private Meshy meshy;
+
+    public MeshyChannelnitializer(Meshy meshy) {
+        this.meshy = meshy;
+    }
+
+    @Override
+    public void initChannel(Channel channel) throws Exception {
+        channel.pipeline().addLast(
+                new MeshyFrameDecoder(16384, 8, 4),
+                new MeshyChannelHandler(meshy, channel)
+        );
+    }
 }

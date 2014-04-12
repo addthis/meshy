@@ -11,9 +11,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy.service.stream;
 
-import java.io.ByteArrayInputStream;
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.addthis.meshy.service.stream;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -32,17 +44,20 @@ import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.SendWatcher;
 import com.addthis.meshy.TargetHandler;
-import com.addthis.meshy.VirtualFileInput;
-import com.addthis.meshy.VirtualFileReference;
-import com.addthis.meshy.VirtualFileSystem;
+import com.addthis.meshy.filesystem.VirtualFileInput;
+import com.addthis.meshy.filesystem.VirtualFileReference;
+import com.addthis.meshy.filesystem.VirtualFileSystem;
+import com.addthis.meshy.util.ByteBufs;
 
 import com.google.common.base.Objects;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 public class StreamTarget extends TargetHandler implements Runnable, SendWatcher {
 
@@ -105,7 +120,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
 
     private void sendFail(String message) {
         log.debug("{} sendFail {}", this, message);
-        send(Bytes.cat(new byte[]{StreamService.MODE_FAIL}, Bytes.toBytes(message)));
+        send(Unpooled.wrappedBuffer(Bytes.cat(new byte[]{StreamService.MODE_FAIL}, Bytes.toBytes(message))));
         sendComplete();
     }
 
@@ -146,22 +161,20 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
-        byte[] data = Meshy.getBytes(length, buffer);
+    public void receive(ByteBuf in) throws Exception {
         if (remoteSource != null) {
             log.trace("{} recv proxy to {}", this, remoteSource);
-            remoteSource.send(data);
+            remoteSource.send(in);
             return;
         }
-        ByteArrayInputStream in = new ByteArrayInputStream(data);
-        int mode = in.read();
-        log.trace("{} recv mode={} len={}", this, mode, length);
+        int mode = in.readByte();
+        log.trace("{} recv mode={} len={}", this, mode, in.readableBytes());
         switch (mode) {
             case StreamService.MODE_START:
             case StreamService.MODE_START_2:
-                String nodeUuid = Bytes.readString(in);
-                fileName = Bytes.readString(in);
-                maxSend = Bytes.readInt(in);
+                String nodeUuid = ByteBufs.readString(in);
+                fileName = ByteBufs.readString(in);
+                maxSend = in.readInt();
                 log.trace("{} start uuid={} file={} max={}", this, nodeUuid, fileName, maxSend);
                 if (maxSend <= 0) {
                     sendFail("invalid buffer size: " + maxSend);
@@ -174,11 +187,11 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 }
                 Map<String, String> params = null;
                 if (mode == StreamService.MODE_START_2) {
-                    int count = Bytes.readInt(in);
+                    int count = in.readInt();
                     params = new HashMap<>(count);
                     while (count-- > 0) {
-                        String key = Bytes.readString(in);
-                        String val = Bytes.readString(in);
+                        String key = ByteBufs.readString(in);
+                        String val = ByteBufs.readString(in);
                         params.put(key, val);
                     }
                 }
@@ -207,7 +220,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 } else {
                     remoteSource = new StreamSource(getChannelMaster(), nodeUuid, nodeUuid, fileName, params, maxSend) {
                         @Override
-                        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+                        public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
                             if (StreamService.DIRECT_COPY) {
                                 StreamTarget.this.send(buffer, length);
                             } else {
@@ -275,7 +288,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
         log.debug("{} close {} remote={} closed={}", this, fileIn, remoteSource, closed);
         if (closed.compareAndSet(false, true)) {
             log.debug("{} sending close", this);
-            send(new byte[]{StreamService.MODE_CLOSE});
+            send(Unpooled.wrappedBuffer(new byte[]{StreamService.MODE_CLOSE}));
             sendComplete();
             complete();
         }
@@ -366,20 +379,21 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 }
                 return -1;
             }
-            byte next[] = fileIn.nextBytes(StreamService.READ_WAIT);
+            ByteBuf next = (ByteBuf) fileIn.nextMessage(StreamService.READ_WAIT);
             if (next != null) {
                 if (log.isTraceEnabled()) {
-                    log.trace(this + " send add read=" + next.length);
+                    log.trace(this + " send add read=" + next.readableBytes());
                 }
-                StreamService.readBytes.addAndGet(next.length);
-                ChannelBuffer buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
+                StreamService.readBytes.addAndGet(next.readableBytes());
+                ByteBuf buf = getSendBuffer(next.readableBytes() + StreamService.STREAM_BYTE_OVERHEAD);
                 buf.writeByte(StreamService.MODE_MORE);
                 buf.writeBytes(next);
-                int bytesSent = send(buf, sender);
+                int bytesSent = buf.readableBytes();
+                send(buf, sender);
                 sendRemain.addAndGet(-bytesSent);
                 sentBytes += bytesSent;
                 if (log.isTraceEnabled()) {
-                    log.trace(this + " read read=" + next.length + " sendRemain=" + sendRemain);
+                    log.trace(this + " read read=" + bytesSent + " sendRemain=" + sendRemain);
                 }
                 return bytesSent;
             } else if (fileIn.isEOF()) {
