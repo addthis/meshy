@@ -11,7 +11,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy;
+
+/*
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.addthis.meshy.netty;
 
 import java.util.Collections;
 import java.util.Set;
@@ -23,7 +37,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.netty.LinkedMeshHandler;
+import com.addthis.meshy.ChannelMaster;
+import com.addthis.meshy.ChannelState;
+import com.addthis.meshy.MeshyConstants;
+import com.addthis.meshy.SessionHandler;
+import com.addthis.meshy.TargetHandler;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,66 +57,29 @@ import io.netty.channel.group.ChannelGroupFuture;
 import io.netty.channel.group.ChannelGroupFutureListener;
 
 
-public abstract class SourceHandler extends ChannelDuplexHandler implements SessionHandler {
+/**
+ * Manages (possibly) multiple targets for a source.
+ */
+public abstract class MultiplexingSourceHandler extends ChannelDuplexHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(SourceHandler.class);
-    static final int DEFAULT_COMPLETE_TIMEOUT = Parameter.intValue("meshy.complete.timeout", 120);
-    static final int DEFAULT_RESPONSE_TIMEOUT = Parameter.intValue("meshy.source.timeout", 0);
-    static final boolean SLOW_SLOW_CHANNELS = Parameter.boolValue("meshy.source.closeSlow", false);
-    static final boolean DISABLE_CREATION_FRAMES = Parameter.boolValue("meshy.source.noCreationFrames", true);
+    private static final Logger log = LoggerFactory.getLogger(MultiplexingSourceHandler.class);
 
-    // only used by response watcher
-    static final Set<SourceHandler> activeSources = Collections.newSetFromMap(new ConcurrentHashMap<SourceHandler, Boolean>());
-    // TODO: use scheduled thread pool
-    static final Thread responseWatcher = new Thread("Source Response Watcher") {
-        {
-            setDaemon(true);
-            start();
-        }
-
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    sleep(1000);
-                } catch (Exception ignored) {
-                    break;
-                }
-                probeActiveSources();
-            }
-            log.info(this + " exiting");
-        }
-
-        private void probeActiveSources() {
-            for (SourceHandler handler : activeSources) {
-                handler.handleChannelTimeouts();
-            }
-        }
-    };
-
-    private final String className = getClass().getName();
-    private final String shortName = className.substring(className.lastIndexOf(".") + 1);
-    private final AtomicBoolean sent = new AtomicBoolean(false);
-    private final AtomicBoolean complete = new AtomicBoolean(false);
-    private final AtomicBoolean waited = new AtomicBoolean(false);
-    private final Semaphore gate = new Semaphore(0);
     private final ChannelMaster master;
-
     private ChannelHandlerContext ctx;
+    private ChannelGroup channels;
 
     private int session;
     private int targetHandler;
     private long readTime;
     private long readTimeout;
     private long completeTimeout;
-    private ChannelGroup channels;
 
-    public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass) {
+    public MultiplexingSourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass) {
         this(master, targetClass, MeshyConstants.LINK_ALL);
     }
 
     // TODO: more sane construction
-    public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass, String targetUuid) {
+    public MultiplexingSourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass, String targetUuid) {
         this.master = master;
         master.createSession(this, targetClass, targetUuid);
     }

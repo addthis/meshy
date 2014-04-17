@@ -12,22 +12,41 @@
  * limitations under the License.
  */
 
-package com.addthis.meshy.util;
+package com.addthis.meshy.netty;
 
 import java.net.SocketAddress;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelPromise;
 
 /**
  * A relatively lightweight handler / pipeline connector.
- *
+ * <p/>
  * For now, do not use the ctx object, but instead call super.METHOD
  */
 public class LinkedMeshHandler extends LinkedMeshInboundHandler implements ChannelOutboundHandler {
 
-    ChannelOutboundHandler nextOutbound;
+    public ChannelOutboundHandler nextOutbound;
+
+    public LinkedMeshHandler(ChannelInboundHandler nextInbound, ChannelOutboundHandler nextOutbound) {
+        super(nextInbound);
+        this.nextOutbound = nextOutbound;
+    }
+
+    public LinkedMeshHandler(ChannelInboundHandler nextInbound) {
+        super(nextInbound);
+    }
+
+    public LinkedMeshHandler(ChannelOutboundHandler nextOutbound) {
+        super();
+        this.nextOutbound = nextOutbound;
+    }
+
+    public LinkedMeshHandler() {
+        super();
+    }
 
     @Override
     public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) throws Exception {

@@ -37,64 +37,76 @@ import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
-import com.addthis.meshy.SourceHandler;
+import com.addthis.meshy.util.AssemblingCompositeByteBuf;
 import com.addthis.meshy.util.ByteBufs;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelHandlerContext;
 
-public class FileSource extends SourceHandler {
+public class FileClientHandler extends ChannelDuplexHandler {
 
-    protected static final Logger log = LoggerFactory.getLogger(FileSource.class);
+    protected static final Logger log = LoggerFactory.getLogger(FileClientHandler.class);
     static final boolean traceComplete = Parameter.boolValue("meshy.finder.debug.complete", false);
 
     private final LinkedList<FileReference> list = new LinkedList<>();
-    private final String[] fileRequest;
-    private FileReferenceFilter filter;
 
-    public FileSource(ChannelMaster master, String files[]) {
-        super(master, FileTarget.class);
-        requestFiles("local", files);
-        fileRequest = files;
+    ChannelHandlerContext ctx;
+
+    private final String scope;
+    private final FileReferenceFilter filter;
+    private final String targetUuid;
+    private final String[] files;
+
+    public FileClientHandler(String files[]) {
+        this("local", files);
     }
 
-    public FileSource(ChannelMaster master, String files[], String scope) {
-        super(master, FileTarget.class);
-        requestFiles(scope, files);
-        fileRequest = files;
+    public FileClientHandler(String files[], String scope) {
+        this(null, files, scope, null);
     }
 
-    public FileSource(ChannelMaster master, String files[], FileReferenceFilter filter) {
-        super(master, FileTarget.class);
-        this.filter = filter;
-        requestFiles("local", files);
-        fileRequest = files;
+    public FileClientHandler(String files[], FileReferenceFilter filter) {
+        this(null, files, "local", filter);
     }
 
     /**
      * used for internal proxy through mesh
      */
-    public FileSource(ChannelMaster master, String targetUuid, String files[]) {
-        super(master, FileTarget.class, targetUuid);
-        requestFiles("remote", files);
-        fileRequest = files;
+    public FileClientHandler(String targetUuid, String files[]) {
+        this(targetUuid, files, "remote", null);
+    }
+
+    public FileClientHandler(String targetUuid, String files[], String scope, FileReferenceFilter filter) {
+        this.targetUuid = targetUuid;
+        this.files = files;
+        this.scope = scope;
+        this.filter = filter;
     }
 
     @Override
     public String toString() {
-        return super.toString() + '(' + (fileRequest != null ? Strings.join(fileRequest, ",") : "-") + ')';
+        return super.toString() + '(' + (files != null ? Strings.join(files, ",") : "-") + ')';
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        this.ctx = ctx;
     }
 
     private void requestFiles(String scope, String... matches) {
-        send(ByteBufs.fromString(scope));
+        AssemblingCompositeByteBuf msg = ByteBufs.assemblingBuffer();
+        msg.writeComponent(ByteBufs.fromString(scope));
         log.debug("{} scope={}", this, scope);
         for (String match : matches) {
             log.trace("{} request={}", this, match);
-            send(ByteBufs.fromString(match));
+            msg.writeComponent(ByteBufs.fromString(match));
         }
-        sendComplete();
+        ctx.writeAndFlush(msg);
     }
 
     public Collection<FileReference> getFileList() {
@@ -109,8 +121,7 @@ public class FileSource extends SourceHandler {
         return map;
     }
 
-    @Override
-    public void receive(ChannelState state, ByteBuf buffer) throws Exception {
+    public void receive(ByteBuf buffer) throws Exception {
         /* sync not required b/c overridden in server-server calls */
         FileReference ref = new FileReference(buffer);
         if (filter == null || filter.accept(ref)) {
@@ -119,17 +130,15 @@ public class FileSource extends SourceHandler {
         log.trace("{} recv={}", this, list.size());
     }
 
-    @Override
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
         if (traceComplete) {
-            log.info("recv.complete [{}] {}", completedSession, Strings.join(fileRequest, ","));
+            log.info("recv.complete [{}] {}", completedSession, Strings.join(files, ","));
         }
-        super.receiveComplete(state, completedSession);
     }
 
     // override to detect unexpected channel closures
     @Override
-    public void channelClosed(ChannelState state) {
+    public void channelInactive(ChannelHandlerContext ctx) {
     }
 
     // override in subclasses for async handling

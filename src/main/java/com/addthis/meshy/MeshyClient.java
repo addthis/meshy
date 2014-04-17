@@ -22,8 +22,8 @@ import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.addthis.meshy.service.file.FileClientHandler;
 import com.addthis.meshy.service.file.FileReference;
-import com.addthis.meshy.service.file.FileSource;
 import com.addthis.meshy.service.stream.SourceInputStream;
 import com.addthis.meshy.service.stream.StreamSource;
 
@@ -130,9 +130,9 @@ public class MeshyClient extends Meshy {
         if (closed.get()) {
             throw new IOException("client connection closed");
         }
-        FileSource fileSource = new FileSource(this, paths);
-        fileSource.waitComplete();
-        return fileSource.getFileList();
+        FileClientHandler fileClientHandler = new FileClientHandler(this, paths);
+        fileClientHandler.waitComplete();
+        return fileClientHandler.getFileList();
     }
 
     /**
@@ -142,7 +142,7 @@ public class MeshyClient extends Meshy {
         if (closed.get()) {
             throw new IOException("client connection closed");
         }
-        FileSource fileSource = new FileSource(this, paths) {
+        FileClientHandler fileClientHandler = new FileClientHandler(this, paths) {
             @Override
             public void receiveReference(FileReference ref) {
                 callback.receiveReference(ref);

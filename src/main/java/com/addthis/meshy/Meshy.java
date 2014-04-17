@@ -37,7 +37,7 @@ import java.text.DecimalFormat;
 import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.service.file.FileSource;
+import com.addthis.meshy.service.file.FileClientHandler;
 import com.addthis.meshy.service.file.FileTarget;
 import com.addthis.meshy.service.host.HostSource;
 import com.addthis.meshy.service.host.HostTarget;
@@ -100,7 +100,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     static {
         registerHandlerClass(HostSource.class);
         registerHandlerClass(HostTarget.class);
-        registerHandlerClass(FileSource.class);
+        registerHandlerClass(FileClientHandler.class);
         registerHandlerClass(FileTarget.class);
         registerHandlerClass(PeerSource.class);
         registerHandlerClass(PeerTarget.class);

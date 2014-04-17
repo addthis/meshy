@@ -85,7 +85,7 @@ public class FileReference {
     }
 
     ByteBuf encode(String uuid) {
-        ByteBuf to = ByteBufs.meshAlloc.buffer();
+        ByteBuf to = ByteBufs.MESH_ALLOC.buffer();
         encode(uuid, to);
         return to;
     }

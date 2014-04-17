@@ -11,10 +11,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.addthis.meshy;
 
+package com.addthis.meshy.netty;
 
-public interface SendWatcher {
+/**
+ * It will be the job of this class to seamlessly multiplex a single (for now)
+ * channel into multiple virtual channels (either local or embedded). It will
+ * track sessions, and downstream channels will behave as if connections were
+ * all simple non-persistent connections. Probably local first although it may
+ * be slightly more expensive for some operations.
+ *
+ * This is similar to ChannelState's current function.
+ */
+public class ConnectionMultiplexer {
 
-    public void sendFinished(int bytes);
 }

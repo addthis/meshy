@@ -26,14 +26,21 @@
  * limitations under the License.
  */
 
-package com.addthis.meshy.util;
+package com.addthis.meshy.netty;
 
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 
 class LinkedMeshInboundHandler implements ChannelInboundHandler {
 
-    protected ChannelInboundHandler nextInbound;
+    public ChannelInboundHandler nextInbound;
+
+    public LinkedMeshInboundHandler (ChannelInboundHandler nextInbound) {
+       this.nextInbound = nextInbound;
+    }
+
+    public LinkedMeshInboundHandler () {
+    }
 
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {

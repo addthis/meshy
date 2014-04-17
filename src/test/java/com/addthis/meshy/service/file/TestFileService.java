@@ -35,7 +35,7 @@ public class TestFileService extends TestMesh {
     public void singlePeer() throws Exception {
         final MeshyServer server = getServer("src/test/files");
         final MeshyClient client = getClient(server);
-        FileSource files = new FileSource(client, new String[]{
+        FileClientHandler files = new FileClientHandler(client, new String[]{
                 "*/*.xml",
                 "*/hosts",
         });
@@ -49,7 +49,7 @@ public class TestFileService extends TestMesh {
         checkFile(map, new FileReference("/c/hosts", 0, 593366).setHostUUID(server.getUUID()));
         checkFile(map, new FileReference("/mux/hosts", 0, 593366).setHostUUID(server.getUUID()));
         /** second test exercises the cache */
-        files = new FileSource(client, new String[]{
+        files = new FileClientHandler(client, new String[]{
                 "*/*.xml",
                 "*/hosts",
         });
@@ -74,7 +74,7 @@ public class TestFileService extends TestMesh {
         // allow server connections to establish
         waitQuiescent();
         Meshy client = getClient(server1);
-        FileSource files = new FileSource(client, new String[]{"*.xml"});
+        FileClientHandler files = new FileClientHandler(client, new String[]{"*.xml"});
         files.waitComplete();
         log.info("file.list --> {}", files.getFileList());
         Map<String, FileReference> map = files.getFileMap();

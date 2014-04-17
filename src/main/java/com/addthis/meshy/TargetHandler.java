@@ -16,6 +16,8 @@ package com.addthis.meshy;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import com.addthis.meshy.netty.LinkedMeshHandler;
+
 import com.google.common.base.Objects;
 
 import org.slf4j.Logger;
@@ -23,9 +25,9 @@ import org.slf4j.LoggerFactory;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelDuplexHandler;
 
-
-public abstract class TargetHandler implements SessionHandler {
+public abstract class TargetHandler extends ChannelDuplexHandler implements SessionHandler {
 
     protected static final Logger log = LoggerFactory.getLogger(TargetHandler.class);
     private final String className = getClass().getName();

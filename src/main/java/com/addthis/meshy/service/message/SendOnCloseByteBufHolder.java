@@ -39,7 +39,7 @@ class SendOnCloseByteBufHolder extends DefaultByteBufHolder implements Closeable
     private final OutputSender sender;
 
     SendOnCloseByteBufHolder(OutputSender sender, int estSize) {
-        super(ByteBufs.meshAlloc.buffer(estSize));
+        super(ByteBufs.MESH_ALLOC.buffer(estSize));
         this.sender = sender;
     }
 

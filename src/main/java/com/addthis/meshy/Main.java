@@ -34,8 +34,8 @@ import com.addthis.basis.util.JitterClock;
 import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.service.file.DupFilter;
+import com.addthis.meshy.service.file.FileClientHandler;
 import com.addthis.meshy.service.file.FileReference;
-import com.addthis.meshy.service.file.FileSource;
 import com.addthis.meshy.service.host.HostNode;
 import com.addthis.meshy.service.host.HostSource;
 import com.addthis.meshy.service.stream.StreamSource;
@@ -52,9 +52,9 @@ public final class Main {
                 if (args.length > 3) {
                     String cmd = args[3];
                     if (cmd.equals("ls") && args.length > 4) {
-                        FileSource fileSource = new FileSource(more, new String[]{args[4]});
-                        fileSource.waitComplete();
-                        for (FileReference file : fileSource.getFileList()) {
+                        FileClientHandler fileClientHandler = new FileClientHandler(more, new String[]{args[4]});
+                        fileClientHandler.waitComplete();
+                        for (FileReference file : fileClientHandler.getFileList()) {
                             System.out.println(file.getHostUUID() + " " + file.name + " \t " + file.size + " \t " + new Date(file.lastModified));
                         }
                     } else if (cmd.equals("cat") && args.length > 5) {
@@ -110,7 +110,7 @@ public final class Main {
                         final AtomicLong totalBytes = new AtomicLong(0);
                         final AtomicLong readBytes = new AtomicLong(0);
                         final AtomicLong lastEmit = new AtomicLong(JitterClock.globalTime());
-                        final FileSource fs = new FileSource(more, fileMatch, new DupFilter());
+                        final FileClientHandler fs = new FileClientHandler(more, fileMatch, new DupFilter());
                         fs.waitComplete();
                         final Iterator<FileReference> fsIter = fs.getFileList().iterator();
                         final HashMap<FileReference, Long> perfData = new HashMap<>();

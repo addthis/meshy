@@ -23,8 +23,8 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TestMesh;
+import com.addthis.meshy.service.file.FileClientHandler;
 import com.addthis.meshy.service.file.FileReference;
-import com.addthis.meshy.service.file.FileSource;
 import com.addthis.meshy.util.ByteBufs;
 
 import org.junit.Test;
@@ -57,7 +57,7 @@ public class TestMessageFileSystem extends TestMesh {
         /*
          * any client can then discover the rpc/file endpoint via normal FileService calls
          */
-        FileSource files = new FileSource(client, new String[]{"/rpc.test/*.rpc"});
+        FileClientHandler files = new FileClientHandler(client, new String[]{"/rpc.test/*.rpc"});
         files.waitComplete();
         Map<String, FileReference> map = files.getFileMap();
 

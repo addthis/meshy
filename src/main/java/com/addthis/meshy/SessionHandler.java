@@ -27,16 +27,12 @@
  */
 package com.addthis.meshy;
 
-import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFuture;
 
 
 public interface SessionHandler {
 
-    public boolean send(ByteBuf data, SendWatcher watcher);
-
-    public boolean sendComplete();
-
-    public void receive(ChannelState state, int session, ByteBuf buffer) throws Exception;
+    public ChannelFuture sendComplete();
 
     public void receiveComplete(ChannelState state, int session) throws Exception;
 

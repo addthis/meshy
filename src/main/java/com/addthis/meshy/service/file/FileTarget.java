@@ -196,7 +196,7 @@ public class FileTarget extends TargetHandler implements Runnable {
      * perform the find. called by finder threads from an executor service. see run()
      */
     public void doFind() throws IOException {
-        FileSource fileSource = null;
+        FileClientHandler fileClientHandler = null;
         findsRunning.inc();
         try {
             //should we ask other meshy nodes for file references as well?
@@ -205,7 +205,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             if (remote) { //yes, ask other meshy nodes (and ourselves)
                 forwardMetaData = "localF".equals(scope);
                 try {
-                    fileSource = new ForwardingFileSource(getChannelMaster(), MeshyConstants.LINK_NAMED,
+                    fileClientHandler = new ForwardingFileClientHandler(getChannelMaster(), MeshyConstants.LINK_NAMED,
                             paths.toArray(new String[paths.size()]));
                 } catch (ChannelException ignored) {
                     // can happen when there are no remote hosts
@@ -238,9 +238,9 @@ public class FileTarget extends TargetHandler implements Runnable {
                 FileTarget.this.send(flagRef.encode(null));
             }
             //Expected conditions under which we should cleanup. If we do not expect a response from the mesh
-            // (fileSource == null implies no remote request or an error attempting it; peerCount == 0 implies
+            // (fileClientHandler == null implies no remote request or an error attempting it; peerCount == 0 implies
             // something similar) or if the mesh has already finished responding.
-            if (fileSource == null || fileSource.getPeerCount() == 0 || !firstDone.compareAndSet(false, true)) {
+            if (fileClientHandler == null || fileClientHandler.getPeerCount() == 0 || !firstDone.compareAndSet(false, true)) {
                 findTime.addAndGet(System.currentTimeMillis() - markTime);
                 findsRunning.dec();
                 sendComplete();
@@ -493,11 +493,11 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
     }
 
-    private class ForwardingFileSource extends FileSource {
+    private class ForwardingFileClientHandler extends FileClientHandler {
 
         private final AtomicBoolean doComplete = new AtomicBoolean();
 
-        public ForwardingFileSource(ChannelMaster master, String nameFilter, String[] files) {
+        public ForwardingFileClientHandler(ChannelMaster master, String nameFilter, String[] files) {
             super(master, nameFilter, files);
         }
 

@@ -29,10 +29,10 @@ import io.netty.util.CharsetUtil;
 
 public class ByteBufs {
 
-    public static ByteBufAllocator meshAlloc = PooledByteBufAllocator.DEFAULT;
+    public static final ByteBufAllocator MESH_ALLOC = PooledByteBufAllocator.DEFAULT;
 
     public static ByteBuf fromString(String string) {
-        return ByteBufUtil.encodeString(meshAlloc, CharBuffer.wrap(string), CharsetUtil.UTF_8);
+        return ByteBufUtil.encodeString(MESH_ALLOC, CharBuffer.wrap(string), CharsetUtil.UTF_8);
     }
 
     public static String toString(ByteBuf buf) {
@@ -40,11 +40,19 @@ public class ByteBufs {
     }
 
     public static ByteBuf quickAlloc() {
-        return meshAlloc.buffer();
+        return MESH_ALLOC.buffer();
+    }
+
+    public static AssemblingCompositeByteBuf assemblingBuffer() {
+        return assemblingBuffer(16);
+    }
+
+    public static AssemblingCompositeByteBuf assemblingBuffer(int maxNumComponents) {
+        return new AssemblingCompositeByteBuf(MESH_ALLOC, false, maxNumComponents);
     }
 
     public static ByteBufOutputStream allocOutputStream() {
-        return new ByteBufOutputStream(meshAlloc.buffer());
+        return new ByteBufOutputStream(MESH_ALLOC.buffer());
     }
 
     public static void writeString(String string, ByteBuf to) {

@@ -54,7 +54,7 @@ public class TestVFS extends TestMesh {
     public void testVFS() throws Exception {
         final MeshyServer server = getServer("src/test");
         final MeshyClient client = getClient(server);
-        FileSource files = new FileSource(client, new String[]{"*"});
+        FileClientHandler files = new FileClientHandler(client, new String[]{"*"});
         files.waitComplete();
         Map<String, FileReference> map = files.getFileMap();
         log.info("map={}", map);
