@@ -133,10 +133,7 @@ public class SourceInputStream extends InputStream {
             }
             byte[] data = null;
             try {
-                if (!primed) {
-                    requestMoreData();
-                    primed = true;
-                }
+                maybePrime();
                 if (blocking) {
                     if (log.isTraceEnabled()) {
                         log.trace("{} fill from finderQueue={} wait={}", this, deque.size(), MAX_READ_WAIT);
@@ -210,6 +207,13 @@ public class SourceInputStream extends InputStream {
             return true;
         }
         return true;
+    }
+
+    public void maybePrime() {
+        if (!primed) {
+            requestMoreData();
+            primed = true;
+        }
     }
 
     void requestMoreData() {
