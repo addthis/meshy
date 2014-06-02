@@ -30,8 +30,6 @@ import com.addthis.basis.util.Parameter;
 import com.addthis.meshy.ChannelState;
 
 import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Counter;
-import com.yammer.metrics.core.Histogram;
 import com.yammer.metrics.core.Timer;
 
 import org.slf4j.Logger;
@@ -63,11 +61,7 @@ public class SourceInputStream extends InputStream {
     private boolean primed = false;
 
     /* metrics */
-    private final Histogram dequeSizeHisto = Metrics.newHistogram(getClass(), "dequeSizeHisto");
-    private final Histogram basHisto = Metrics.newHistogram(getClass(), "basHisto");
-    private final Counter requestMoreData = Metrics.newCounter(getClass(), "requestMoreData");
-    private final Timer dequePollTimer = Metrics.newTimer(getClass(), "dequeTimer");
-
+    private static final Timer dequePollTimer = Metrics.newTimer(SourceInputStream.class, "dequeTimer");
 
     @Override
     public String toString() {
@@ -98,7 +92,6 @@ public class SourceInputStream extends InputStream {
             if (log.isTraceEnabled()) {
                 log.trace("{} feed={}", this, data.length);
             }
-            basHisto.update(data.length);
             deque.put(data);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -223,7 +216,6 @@ public class SourceInputStream extends InputStream {
     void requestMoreData(int times) {
         expectingBytes.addAndGet(maxBufferSize * times);
         for (int i = 0; i < times; i++) {
-            requestMoreData.inc();
             source.requestMoreData();
         }
     }
