@@ -59,6 +59,7 @@ public class ByteBufs {
         ByteBuf stringBuf = ByteBufs.fromString(string);
         writeLength((long) stringBuf.readableBytes(), to);
         to.writeBytes(stringBuf);
+        stringBuf.release();
     }
 
     public static String readString(ByteBuf from) throws IOException {
