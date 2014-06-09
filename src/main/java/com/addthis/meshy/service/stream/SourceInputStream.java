@@ -72,11 +72,6 @@ public class SourceInputStream extends InputStream {
         return "{expect=" + expectingBytes + " max=" + maxBufferSize + " q=" + deque.size() + " done=" + done + "}";
     }
 
-    @Override
-    protected void finalize() {
-        close();
-    }
-
     SourceInputStream(final StreamSource source, final int maxBufferSize) {
         this.source = source;
         this.maxBufferSize = maxBufferSize;
@@ -89,9 +84,7 @@ public class SourceInputStream extends InputStream {
 
     void feed(byte[] data) {
         try {
-            if (log.isTraceEnabled()) {
-                log.trace("{} feed={}", this, data.length);
-            }
+            log.trace("{} feed={}", this, data.length);
             deque.put(data);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
