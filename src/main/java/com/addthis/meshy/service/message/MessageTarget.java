@@ -17,7 +17,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import com.addthis.basis.util.Bytes;
 
@@ -37,22 +39,43 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
 
     private static final Logger log = LoggerFactory.getLogger(MessageTarget.class);
 
-    private static final HashMap<String, TargetListener> targetListeners = new HashMap<>();
+    private static final HashMap<String, TargetListener[]> targetListeners = new HashMap<>();
 
     public static void registerListener(String topic, TargetListener listener) {
         synchronized (targetListeners) {
-            if (targetListeners.put(topic, listener) != null) {
-                log.warn("WARNING: override listener for " + topic);
+            TargetListener[] list = targetListeners.get(topic);
+            if (list == null) {
+                list = new TargetListener[1];
+            } else {
+                TargetListener[] newlist = new TargetListener[list.length+1];
+                System.arraycopy(list, 0, newlist, 0, list.length);
+                list = newlist;
+            }
+            targetListeners.put(topic, list);
+            list[list.length-1]=listener;
+        }
+    }
+
+    public static void deregisterListener(String topic, TargetListener listener) {
+        synchronized (targetListeners) {
+            TargetListener[] list = targetListeners.get(topic);
+            if (list != null) {
+                for (int i=0; i<list.length; i++) {
+                    if (list[i] == listener) {
+                        TargetListener[] newlist = new TargetListener[list.length-1];
+                        System.arraycopy(list, 0, newlist, 0, i);
+                        if (i < list.length-1) {
+                            System.arraycopy(list, i+1, newlist, i, newlist.length-i);
+                        }
+                        list = newlist;
+                        return;
+                    }
+                }
             }
         }
     }
 
-    @Deprecated
-    public static void deregisterListener(String topic, TargetListener ignored) {
-        deregisterListener(topic);
-    }
-
-    public static void deregisterListener(String topic) {
+    public static void deregisterAllListeners(String topic) {
         synchronized (targetListeners) {
             targetListeners.remove(topic);
         }
@@ -69,9 +92,11 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
         InputStream in = Meshy.getInput(length, buffer);
         String topic = Bytes.readString(in);
         synchronized (targetListeners) {
-            TargetListener listener = targetListeners.get(topic);
-            if (listener != null) {
-                listener.receiveMessage(this, topic, in);
+            TargetListener[] list = targetListeners.get(topic);
+            if (list != null) {
+                for (TargetListener listener : list) {
+                    listener.receiveMessage(this, topic, in);
+                }
             }
         }
     }
@@ -79,8 +104,10 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     @Override
     public void receiveComplete() throws Exception {
         synchronized (targetListeners) {
-            for (TargetListener listener : targetListeners.values()) {
-                listener.linkDown(this);
+            for (TargetListener[] list : targetListeners.values()) {
+                for (TargetListener listener : list) {
+                    listener.linkDown(this);
+                }
             }
         }
     }

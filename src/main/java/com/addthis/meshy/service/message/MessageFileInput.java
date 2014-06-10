@@ -93,7 +93,7 @@ class MessageFileInput implements VirtualFileInput, TargetListener {
         } catch (Exception ex) {
             MessageFileSystem.log.warn("MessageFileInput exception", ex);
         } finally {
-            MessageTarget.deregisterListener(topicID);
+            MessageTarget.deregisterListener(topicID, this);
         }
         return null;
     }
