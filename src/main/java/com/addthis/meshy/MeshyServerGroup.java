@@ -206,7 +206,7 @@ public class MeshyServerGroup {
         }
 
         String report = rep.toString();
-        MeshyServer.log.info(report);
+        MeshyServer.log.debug(report);
         synchronized (lastStats) {
             lastStats.addLast("t=" + JitterClock.globalTime() + " " + report);
             if (lastStats.size() > 10) {
