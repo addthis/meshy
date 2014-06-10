@@ -30,8 +30,6 @@ import com.addthis.basis.util.Parameter;
 import com.addthis.meshy.ChannelState;
 
 import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Counter;
-import com.yammer.metrics.core.Histogram;
 import com.yammer.metrics.core.Timer;
 
 import org.slf4j.Logger;
@@ -63,11 +61,7 @@ public class SourceInputStream extends InputStream {
     private boolean primed = false;
 
     /* metrics */
-    private final Histogram dequeSizeHisto = Metrics.newHistogram(getClass(), "dequeSizeHisto");
-    private final Histogram basHisto = Metrics.newHistogram(getClass(), "basHisto");
-    private final Counter requestMoreData = Metrics.newCounter(getClass(), "requestMoreData");
-    private final Timer dequePollTimer = Metrics.newTimer(getClass(), "dequeTimer");
-
+    private static final Timer dequePollTimer = Metrics.newTimer(SourceInputStream.class, "dequeTimer");
 
     @Override
     public String toString() {
@@ -76,11 +70,6 @@ public class SourceInputStream extends InputStream {
 
     String toStatus() {
         return "{expect=" + expectingBytes + " max=" + maxBufferSize + " q=" + deque.size() + " done=" + done + "}";
-    }
-
-    @Override
-    protected void finalize() {
-        close();
     }
 
     SourceInputStream(final StreamSource source, final int maxBufferSize) {
@@ -93,12 +82,9 @@ public class SourceInputStream extends InputStream {
         return maxBufferSize;
     }
 
-    void feed(byte data[]) {
+    void feed(byte[] data) {
         try {
-            if (log.isTraceEnabled()) {
-                log.trace("{} feed={}", this, data.length);
-            }
-            basHisto.update(data.length);
+            log.trace("{} feed={}", this, data.length);
             deque.put(data);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -123,7 +109,7 @@ public class SourceInputStream extends InputStream {
      * @throws java.io.IOException if remote error
      */
     private boolean fill(boolean blocking, long wait, TimeUnit timeUnit) throws IOException {
-        dequeSizeHisto.update(deque.size());
+//        dequeSizeHisto.update(deque.size());
         if (done) {
             return false;
         }
@@ -131,12 +117,9 @@ public class SourceInputStream extends InputStream {
             if (log.isTraceEnabled()) {
                 log.trace("{} fill c={}", this, current != null ? current.available() : "empty");
             }
-            byte data[] = null;
+            byte[] data = null;
             try {
-                if (!primed) {
-                    requestMoreData();
-                    primed = true;
-                }
+                maybePrime();
                 if (blocking) {
                     if (log.isTraceEnabled()) {
                         log.trace("{} fill from finderQueue={} wait={}", this, deque.size(), MAX_READ_WAIT);
@@ -212,6 +195,13 @@ public class SourceInputStream extends InputStream {
         return true;
     }
 
+    public void maybePrime() {
+        if (!primed) {
+            requestMoreData();
+            primed = true;
+        }
+    }
+
     void requestMoreData() {
         requestMoreData(1);
     }
@@ -219,7 +209,6 @@ public class SourceInputStream extends InputStream {
     void requestMoreData(int times) {
         expectingBytes.addAndGet(maxBufferSize * times);
         for (int i = 0; i < times; i++) {
-            requestMoreData.inc();
             source.requestMoreData();
         }
     }
@@ -260,12 +249,12 @@ public class SourceInputStream extends InputStream {
     }
 
     @Override
-    public int read(byte buf[]) throws IOException {
+    public int read(byte[] buf) throws IOException {
         return read(buf, 0, buf.length);
     }
 
     @Override
-    public int read(byte buf[], int off, int len) throws IOException {
+    public int read(byte[] buf, int off, int len) throws IOException {
         if (fill(true)) {
             return current.read(buf, off, len);
         } else {
@@ -278,7 +267,7 @@ public class SourceInputStream extends InputStream {
         if (current != null) {
             return current.available();
         }
-        byte peek[] = deque.peek();
+        byte[] peek = deque.peek();
         /* length 0 is valid for EOF packets, so returning 1 is wrong in that case */
         return peek != null ? peek.length : 0;
     }
