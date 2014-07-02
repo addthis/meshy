@@ -251,6 +251,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
             case StreamService.MODE_MORE:
                 if (!startFrameReceived) {
                     sendFail("'send more' frame received before start frame; see: creation frames");
+                    return;
                 }
                 log.trace("{} more request", this);
                 int current = sendRemain.addAndGet(maxSend);
@@ -264,6 +265,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
             case StreamService.MODE_CLOSE:
                 if (!startFrameReceived) {
                     sendFail("close frame received before start frame; see: creation frames");
+                    return;
                 }
                 log.trace("{} close request", this);
                 modeClose();

@@ -498,11 +498,11 @@ public class FileTarget extends TargetHandler implements Runnable {
 
         @Override
         public void init(int session, int targetHandler, Set<Channel> group) {
+            doComplete = new AtomicBoolean();
             if (forwardMetaData) {
                 //directly get size from group since channels is not set yet;
                 forwardPeerList(group);
             }
-            doComplete = new AtomicBoolean();
             super.init(session, targetHandler, group);
         }
 
