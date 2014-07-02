@@ -480,7 +480,12 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     private class ForwardingFileSource extends FileSource {
 
-        private final AtomicBoolean doComplete = new AtomicBoolean();
+        // must be initialized in init() because (unfortunately) it may be required before
+        // the parent class's constructor finishes. init() is called from the parent class's
+        // constructor; allowing us to hack in some sub-class construction. This is why
+        // constructors should do as little as possible, and really, _really_ not publish
+        // incomplete objects to other threads.
+        private AtomicBoolean doComplete;
 
         public ForwardingFileSource(ChannelMaster master, String nameFilter, String[] files) {
             super(master, nameFilter, files);
@@ -497,6 +502,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                 //directly get size from group since channels is not set yet;
                 forwardPeerList(group);
             }
+            doComplete = new AtomicBoolean();
             super.init(session, targetHandler, group);
         }
 
