@@ -18,6 +18,7 @@ import java.io.ByteArrayInputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -47,14 +48,17 @@ import org.slf4j.LoggerFactory;
 public class StreamTarget extends TargetHandler implements Runnable, SendWatcher {
 
     protected static final Logger log = LoggerFactory.getLogger(StreamTarget.class);
+
     /* max outstanding unack'd writes */
-    private static final int MAX_SEND_BUFFER = Parameter.intValue("meshy.send.buffer", 5) * 1024 * 1024;
+    private static final int MAX_SEND_BUFFER =
+            Parameter.intValue("meshy.send.buffer", 5) * 1024 * 1024;
+
     /* max number of concurrently open streams */
     static final int MAX_OPEN_STREAMS = Parameter.intValue("meshy.stream.maxopen", 1000);
     /* create N sender threads ? */
-    static final int SENDER_THREADS = Parameter.intValue("meshy.senders", 1);
+    static final int SENDER_THREADS   = Parameter.intValue("meshy.senders", 1);
 
-    protected static final ConcurrentHashMap<String, VirtualFileReference> openStreamMap = new ConcurrentHashMap<>();
+    protected static final ConcurrentMap<String, VirtualFileReference> openStreamMap = new ConcurrentHashMap<>();
 
     public static void debugOpenTargets() {
         for (Map.Entry<String, VirtualFileReference> e : openStreamMap.entrySet()) {
@@ -62,45 +66,52 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
         }
     }
 
-    static final LinkedBlockingQueue<Runnable> senderQueue = new LinkedBlockingQueue<>(MAX_OPEN_STREAMS - SENDER_THREADS);
+    static final LinkedBlockingQueue<Runnable> senderQueue =
+            new LinkedBlockingQueue<>(MAX_OPEN_STREAMS - SENDER_THREADS);
 
-    private static final ExecutorService senderPool = MoreExecutors
-            .getExitingExecutorService(new ThreadPoolExecutor(SENDER_THREADS, SENDER_THREADS, 0L, TimeUnit.MILLISECONDS,
-                    senderQueue,
-                    new ThreadFactoryBuilder().setNameFormat("sender-%d").build()), 1, TimeUnit.SECONDS);
+    private static final ExecutorService senderPool = MoreExecutors.getExitingExecutorService(
+            new ThreadPoolExecutor(SENDER_THREADS, SENDER_THREADS,
+                                   0L, TimeUnit.MILLISECONDS, senderQueue,
+                                   new ThreadFactoryBuilder().setNameFormat("sender-%d").build()),
+            1, TimeUnit.SECONDS);
 
-    private static final ExecutorService inMemorySenderPool = MoreExecutors
-            .getExitingExecutorService(new ThreadPoolExecutor(SENDER_THREADS, SENDER_THREADS, 0L, TimeUnit.MILLISECONDS,
-                    new LinkedBlockingQueue<Runnable>(),
-                    new ThreadFactoryBuilder().setNameFormat("inMemorySender-%d").build()), 1, TimeUnit.SECONDS);
+    private static final ExecutorService inMemorySenderPool =
+            MoreExecutors.getExitingExecutorService(
+                    new ThreadPoolExecutor(SENDER_THREADS, SENDER_THREADS,
+                                           0L, TimeUnit.MILLISECONDS,
+                                           new LinkedBlockingQueue<Runnable>(),
+                                           new ThreadFactoryBuilder().setNameFormat(
+                                                   "inMemorySender-%d").build()), 1,
+                    TimeUnit.SECONDS);
 
     //closed is only set to true in modeClose
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final AtomicBoolean closed         = new AtomicBoolean(false);
     //streamComplete is only set to true in streamComplete
     private final AtomicBoolean streamComplete = new AtomicBoolean(false);
-    private final AtomicInteger sendRemain = new AtomicInteger(0);
-    private final AtomicBoolean queueState = new AtomicBoolean(false);
+    private final AtomicInteger sendRemain     = new AtomicInteger(0);
+    private final AtomicBoolean queueState     = new AtomicBoolean(false);
 
-    private int maxSend = 0;
-    private VirtualFileInput fileIn = null;
-    private StreamSource remoteSource = null;
-    private String fileName;
-    private int recvMore = 0;
-    private int sentBytes = 0;
+    private int              maxSend            = 0;
+    private int              recvMore           = 0;
+    private int              sentBytes          = 0;
+    private VirtualFileInput fileIn             = null;
+    private StreamSource     remoteSource       = null;
+    private String           fileName           = null;
+    private boolean          startFrameReceived = false;
 
     @Override
     protected Objects.ToStringHelper toStringHelper() {
         return super.toStringHelper()
-                .add("closed", closed)
-                .add("streamComplete", streamComplete)
-                .add("sendRemain", sendRemain)
-                .add("queueState", queueState)
-                .add("fileIn", fileIn)
-                .add("remoteSource", remoteSource)
-                .add("fileName", fileName)
-                .add("recvMore", recvMore)
-                .add("sentBytes", sentBytes)
-                .add("maxSend", maxSend);
+                    .add("closed", closed)
+                    .add("streamComplete", streamComplete)
+                    .add("sendRemain", sendRemain)
+                    .add("queueState", queueState)
+                    .add("fileIn", fileIn)
+                    .add("remoteSource", remoteSource)
+                    .add("fileName", fileName)
+                    .add("recvMore", recvMore)
+                    .add("sentBytes", sentBytes)
+                    .add("maxSend", maxSend);
     }
 
     private void sendFail(String message) {
@@ -132,7 +143,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
 
     private static VirtualFileReference locateFile(VirtualFileSystem vfs, String path) {
         log.trace("locate {} --> {}", vfs, path);
-        String tokens[] = vfs.tokenizePath(path);
+        String[] tokens = vfs.tokenizePath(path);
         VirtualFileReference fileRef = vfs.getFileRoot();
         for (String token : tokens) {
             fileRef = fileRef.getFile(token);
@@ -159,6 +170,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
         switch (mode) {
             case StreamService.MODE_START:
             case StreamService.MODE_START_2:
+                startFrameReceived = true;
                 String nodeUuid = Bytes.readString(in);
                 fileName = Bytes.readString(in);
                 maxSend = Bytes.readInt(in);
@@ -237,6 +249,9 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 }
                 break;
             case StreamService.MODE_MORE:
+                if (!startFrameReceived) {
+                    sendFail("'send more' frame received before start frame; see: creation frames");
+                }
                 log.trace("{} more request", this);
                 int current = sendRemain.addAndGet(maxSend);
                 if (current - maxSend <= 0) {
@@ -247,11 +262,15 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 recvMore++;
                 break;
             case StreamService.MODE_CLOSE:
+                if (!startFrameReceived) {
+                    sendFail("close frame received before start frame; see: creation frames");
+                }
                 log.trace("{} close request", this);
                 modeClose();
                 break;
             default:
                 log.warn("{} target unknown mode: {}", getChannelMaster().getUUID(), mode);
+                sendFail("frame mode: " + mode + " not recognized");
                 break;
         }
     }
@@ -366,7 +385,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 }
                 return -1;
             }
-            byte next[] = fileIn.nextBytes(StreamService.READ_WAIT);
+            byte[] next = fileIn.nextBytes(StreamService.READ_WAIT);
             if (next != null) {
                 if (log.isTraceEnabled()) {
                     log.trace(this + " send add read=" + next.length);
