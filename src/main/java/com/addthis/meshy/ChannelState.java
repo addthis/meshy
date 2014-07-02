@@ -279,7 +279,7 @@ public class ChannelState {
                         if ((handler == null) && (master instanceof MeshyServer)) {
                             if (type != MeshyConstants.KEY_EXISTING) {
                                 handler = master.createHandler(type);
-                                ((TargetHandler) handler).setContext(((MeshyServer) master), this, session);
+                                ((TargetHandler) handler).setContext((MeshyServer) master, this, session);
                                 log.debug("{} createHandler {} session={}", this, handler, session);
                                 if (targetHandlers.put(session, handler) != null) {
                                     log.debug("clobbered session {} with {}", session, handler);
@@ -297,25 +297,20 @@ public class ChannelState {
                         }
                     }
                     if (handler != null) {
-                        try {
-                            if (length == 0) {
-                                handler.receiveComplete(this, session);
-                                if (type == MeshyConstants.KEY_RESPONSE) {
-                                    sourceHandlers.remove(session);
-                                    log.debug("{} dropSession session={}", this, session);
-                                } else {
-                                    targetHandlers.remove(session);
-                                }
-                            } else {
+                        if (length == 0) {
+                            sessionComplete(handler, type, session);
+                        } else {
+                            try {
                                 handler.receive(this, session, length, buffer);
+                            } catch (Exception ex) {
+                                log.error("suppressing handler exception during receive; trying receiveComplete", ex);
+                                sessionComplete(handler, type, session);
                             }
-                        } catch (Exception ex) {
-                            log.error("messageReceived error", ex);
                         }
                     }
                     int read = readable - buffer.readableBytes();
                     if (read < length) {
-                        if (handler != null || log.isDebugEnabled()) {
+                        if ((handler != null) || log.isDebugEnabled()) {
                             log.debug("{} recv type={} handler={} ssn={} did not consume all bytes (read={} of {})",
                                     this, type, handler, session, read, length);
                         }
@@ -328,5 +323,19 @@ public class ChannelState {
             }
         }
         buffer.discardReadBytes();
+    }
+
+    private void sessionComplete(SessionHandler handler, int sessionType, int sessionId) {
+        log.debug("{} sessionComplete type={} session={}", this, sessionType, sessionId);
+        try {
+            handler.receiveComplete(this, sessionId);
+        } catch (Exception ex) {
+            log.error("suppressing handler exception during receive complete", ex);
+        }
+        if (sessionType == MeshyConstants.KEY_RESPONSE) {
+            sourceHandlers.remove(sessionId);
+        } else {
+            targetHandlers.remove(sessionId);
+        }
     }
 }
