@@ -125,7 +125,7 @@ public class MeshyClient extends Meshy {
     /**
      * sync version
      */
-    public Collection<FileReference> listFiles(final String paths[]) throws IOException {
+    public Collection<FileReference> listFiles(final String[] paths) throws IOException {
         if (closed.get()) {
             throw new IOException("client connection closed");
         }
@@ -174,6 +174,14 @@ public class MeshyClient extends Meshy {
             throw new IOException("client connection closed");
         }
         return new StreamSource(this, nodeUuid, fileName, options, bufferSize).getInputStream();
+    }
+
+    public StreamSource getFileSource(String nodeUuid, String fileName, Map<String, String> options)
+            throws IOException {
+        if (closed.get()) {
+            throw new IOException("client connection closed");
+        }
+        return new StreamSource(this, nodeUuid, fileName, options, bufferSize);
     }
 
     /** */

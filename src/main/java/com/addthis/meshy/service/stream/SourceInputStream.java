@@ -13,6 +13,8 @@
  */
 package com.addthis.meshy.service.stream;
 
+import javax.annotation.concurrent.NotThreadSafe;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,75 +22,39 @@ import java.io.InterruptedIOException;
 
 import java.net.SocketTimeoutException;
 
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
-import com.addthis.meshy.ChannelState;
+import com.google.common.base.Throwables;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Timer;
 
 import org.slf4j.Logger;
 
-/**
- * creates an input stream from a blocking finderQueue of byte[]
- * <p/>
- * This class is not thread safe.  It is assumed that only one consumer is reading from this stream
- * at any given time.  It is possible for multiple threads to consume from the same input stream as long
- * as it is guaranteed that only one thread is reading from the stream at any point in time.
- */
+@NotThreadSafe
 public class SourceInputStream extends InputStream {
 
-    /* denominator used to decide when to request more bytes */
-    private static final int REFILL_FACTOR = Parameter.intValue("meshy.refill.factor", 2);
     /* max time to wait in seconds for a read response before timing out and closing stream */
     private static final int MAX_READ_WAIT = Parameter.intValue("meshy.stream.timeout", 0) * 1000;
 
     private static final Logger log = StreamService.log;
 
-    private final AtomicInteger expectingBytes = new AtomicInteger(0);
-    private final LinkedBlockingDeque<byte[]> deque = new LinkedBlockingDeque<>();
     private final StreamSource source;
-    private final int maxBufferSize;
-    private final int refillThreshold;
+    private final BlockingQueue<byte[]> messageQueue;
+
     private ByteArrayInputStream current;
     private byte[] currentData;
     private boolean done = false;
-    private boolean primed = false;
 
     /* metrics */
     private static final Timer dequePollTimer = Metrics.newTimer(SourceInputStream.class, "dequeTimer");
 
-    @Override
-    public String toString() {
-        return "SIS(" + source + ") " + toStatus();
-    }
-
-    String toStatus() {
-        return "{expect=" + expectingBytes + " max=" + maxBufferSize + " q=" + deque.size() + " done=" + done + "}";
-    }
-
-    SourceInputStream(final StreamSource source, final int maxBufferSize) {
+    SourceInputStream(StreamSource source) {
         this.source = source;
-        this.maxBufferSize = maxBufferSize;
-        this.refillThreshold = maxBufferSize / REFILL_FACTOR;
-    }
-
-    public int getBufferSize() {
-        return maxBufferSize;
-    }
-
-    void feed(byte[] data) {
-        try {
-            log.trace("{} feed={}", this, data.length);
-            deque.put(data);
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
-        }
+        this.messageQueue = source.getMessageQueue();
     }
 
     private boolean fill(boolean blocking) throws IOException {
@@ -98,7 +64,7 @@ public class SourceInputStream extends InputStream {
     /**
      * Blocking or non blocking (depending on how the source was initialized) call to fill  buffer.
      * <p/>
-     * If blocking the call will wait until data is available on deque before
+     * If blocking the call will wait until data is available on messageQueue before
      * returning if the current buffer is null or empty.
      * <p/>
      * If non-blocking the call will return when data is available or the time limit (wait) has been
@@ -109,7 +75,6 @@ public class SourceInputStream extends InputStream {
      * @throws java.io.IOException if remote error
      */
     private boolean fill(boolean blocking, long wait, TimeUnit timeUnit) throws IOException {
-//        dequeSizeHisto.update(deque.size());
         if (done) {
             return false;
         }
@@ -119,13 +84,12 @@ public class SourceInputStream extends InputStream {
             }
             byte[] data = null;
             try {
-                maybePrime();
                 if (blocking) {
                     if (log.isTraceEnabled()) {
-                        log.trace("{} fill from finderQueue={} wait={}", this, deque.size(), MAX_READ_WAIT);
+                        log.trace("{} fill from finderQueue={} wait={}", this, messageQueue.size(), MAX_READ_WAIT);
                     }
                     long startTime = System.nanoTime();
-                    data = MAX_READ_WAIT > 0 ? deque.poll(MAX_READ_WAIT, TimeUnit.MILLISECONDS) : deque.take();
+                    data = MAX_READ_WAIT > 0 ? messageQueue.poll(MAX_READ_WAIT, TimeUnit.MILLISECONDS) : messageQueue.take();
                     dequePollTimer.update(System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
                     if (data == null) {
                         /* important that we throw SocketTimeoutException so that SourceTracker does not mark this file "dead" */
@@ -133,35 +97,22 @@ public class SourceInputStream extends InputStream {
                     }
                 } else {
                     if (wait > 0) {
-                        data = deque.poll(wait, timeUnit);
+                        data = messageQueue.poll(wait, timeUnit);
                     } else {
-                        data = deque.poll();
+                        data = messageQueue.poll();
                     }
                     if (data == null) {
                         return false;
                     }
                 }
-
-                int sizeIncludingOverhead = data.length + ChannelState.MESHY_BYTE_OVERHEAD
-                                            + StreamService.STREAM_BYTE_OVERHEAD;
-
-                // returns previous value
-                int oldExpectingBytes = expectingBytes.getAndAdd(-sizeIncludingOverhead);
-                // if prior to our update, we were above the threshold
-                if (oldExpectingBytes >= refillThreshold) {
-                    int updatedExpectingBytes = oldExpectingBytes - sizeIncludingOverhead;
-                    // and without respect to the current value, we know our update moved it below
-                    if (updatedExpectingBytes < refillThreshold) {
-                        // for pathologically large chunks, try to recover the buffer state.
-                        // this should usually evaluate to '0 + 1'
-                        int overflowRecoverCount = (sizeIncludingOverhead / maxBufferSize) + 1;
-                        if (overflowRecoverCount != 1) {
-                            log.warn("Sending {} sendMore requests due to pathologically large chunk of size {}",
-                                    overflowRecoverCount, sizeIncludingOverhead);
-                        }
-                        requestMoreData(overflowRecoverCount);
-                    }
+                source.performBufferAccounting(data);
+                if (source.isCloseSignal(data)) {
+                    log.trace("{} fill exit on 0 bytes", this);
+                    currentData = data;
+                    done = true;
+                    return false;
                 }
+                source.throwIfErrorSignal(data);
                 log.trace("{} fill take={}", this, data.length);
             } catch (InterruptedException ex) {
                 log.warn("{} close on stream service interrupted", this);
@@ -171,19 +122,8 @@ public class SourceInputStream extends InputStream {
             } catch (Exception ex) {
                 log.warn("{} close on error", this, ex);
                 close();
-                throw new IOException(ex);
-            }
-            if (data == StreamService.FAIL_BYTES) {
-                close();
-                byte[] error = deque.poll();
-                String errorMessage;
-                errorMessage = error == null ? "no failure message available." : Bytes.toString(error);
-                throw new IOException(errorMessage);
-            } else if (data.length == 0) {
-                log.trace("{} fill exit on 0 bytes", this);
-                currentData = data;
-                done = true;
-                return false;
+                Throwables.propagateIfInstanceOf(ex, IOException.class);
+                throw ex;
             }
             if (blocking) {
                 current = new ByteArrayInputStream(data);
@@ -195,26 +135,8 @@ public class SourceInputStream extends InputStream {
         return true;
     }
 
-    public void maybePrime() {
-        if (!primed) {
-            requestMoreData();
-            primed = true;
-        }
-    }
-
-    void requestMoreData() {
-        requestMoreData(1);
-    }
-
-    void requestMoreData(int times) {
-        expectingBytes.addAndGet(maxBufferSize * times);
-        for (int i = 0; i < times; i++) {
-            source.requestMoreData();
-        }
-    }
-
     /**
-     * Polls the deque for available data.
+     * Polls the messageQueue for available data.
      *
      * @return - a byte array if data is available or null if no data is currently available.
      * @throws java.io.IOException
@@ -224,7 +146,7 @@ public class SourceInputStream extends InputStream {
     }
 
     /**
-     * Polls the deque for available data.
+     * Polls the messageQueue for available data.
      *
      * @param wait     - the amount of time to wait before returning null in the case that no data is available yet
      * @param timeUnit - the time unit for wait
@@ -267,7 +189,7 @@ public class SourceInputStream extends InputStream {
         if (current != null) {
             return current.available();
         }
-        byte[] peek = deque.peek();
+        byte[] peek = messageQueue.peek();
         /* length 0 is valid for EOF packets, so returning 1 is wrong in that case */
         return peek != null ? peek.length : 0;
     }
