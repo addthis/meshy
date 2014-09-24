@@ -110,7 +110,7 @@ public class SourceInputStream extends InputStream {
                 if (source.isCloseSignal(data)) {
                     log.trace("{} fill exit on 0 bytes", this);
                     currentData = data;
-                    done = true;
+                    close();
                     return false;
                 }
                 log.trace("{} fill take={}", this, data.length);
@@ -119,7 +119,7 @@ public class SourceInputStream extends InputStream {
                 close();
                 /* important that we throw InterruptedIOException so that SourceTracker does not mark this file "dead" */
                 throw new InterruptedIOException("stream interrupted");
-            } catch (Exception ex) {
+            } catch (IOException | RuntimeException ex) {
                 log.warn("{} close on error", this, ex);
                 close();
                 Throwables.propagateIfInstanceOf(ex, IOException.class);
