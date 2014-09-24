@@ -217,33 +217,13 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     openStreamMap.put(fileName, ref);
                     log.trace("{} start local={}", this, fileIn);
                 } else {
-                    remoteSource = new StreamSource(getChannelMaster(), nodeUuid, nodeUuid, fileName, params, maxSend) {
-                        @Override
-                        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
-                            if (StreamService.DIRECT_COPY) {
-                                StreamTarget.this.send(buffer, length);
-                            } else {
-                                StreamTarget.this.send(Meshy.getBytes(length, buffer));
-                            }
+                    try {
+                        remoteSource = new ProxyStreamSource(nodeUuid, params);
+                        if (log.isTraceEnabled()) {
+                            log.trace("{} start remote={} #{}", this, remoteSource, remoteSource.getPeerCount());
                         }
-
-                        @Override
-                        public void channelClosed(ChannelState state) {
-                            StreamTarget.this.sendFail(StreamService.ERROR_REMOTE_CHANNEL_LOST +
-                                                       " for channel " + state.getChannel());
-                        }
-
-                        @Override
-                        public void receiveComplete() {
-                            StreamTarget.this.sendComplete();
-                        }
-                    };
-                    if (log.isTraceEnabled()) {
-                        log.trace("{} start remote={} #{}", this, remoteSource, remoteSource.getPeerCount());
-                    }
-                    if (remoteSource.getPeerCount() == 0) {
-                        sendFail("no matching peers");
-                        remoteSource = null;
+                    } catch (Exception ex) {
+                        sendFail(ex.getMessage());
                     }
                     return;
                 }
@@ -427,5 +407,31 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
             log.trace(this + " send finished " + bytes);
         }
         StreamService.sendWaiting.addAndGet(-bytes);
+    }
+
+    private class ProxyStreamSource extends StreamSource {
+        public ProxyStreamSource(String nodeUuid, Map<String, String> params) {
+            super(StreamTarget.this.getChannelMaster(), nodeUuid, nodeUuid,
+                  StreamTarget.this.fileName, params, StreamTarget.this.maxSend);
+        }
+
+        @Override
+        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+            if (StreamService.DIRECT_COPY) {
+                StreamTarget.this.send(buffer, length);
+            } else {
+                StreamTarget.this.send(Meshy.getBytes(length, buffer));
+            }
+        }
+
+        @Override
+        public void channelClosed(ChannelState state) {
+            StreamTarget.this.sendFail(StreamService.ERROR_REMOTE_CHANNEL_LOST + " for channel " + state.getChannel());
+        }
+
+        @Override
+        public void receiveComplete() {
+            StreamTarget.this.sendComplete();
+        }
     }
 }
