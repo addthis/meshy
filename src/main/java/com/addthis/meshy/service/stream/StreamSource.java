@@ -176,6 +176,9 @@ public class StreamSource extends SourceHandler {
     public void receiveComplete() throws Exception {
         log.trace("{} recv send complete", this);
         sendComplete();
+        // this fail signal should never be reached unless something is wrong
+        assert messageQueue != null : "must override receiveComplete for proxy mode";
+        messageQueue.put(StreamService.FAIL_BYTES);
     }
 
     @Override
