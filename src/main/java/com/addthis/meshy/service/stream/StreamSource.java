@@ -65,7 +65,7 @@ public class StreamSource extends SourceHandler {
     private final AtomicLong recvBytes;
     private final AtomicBoolean closeSent;
 
-    @Nullable private volatile IOException err = null;
+    @Nullable private volatile String err = StreamService.ERROR_UNKNOWN;
 
     /* client-server constructor */
     public StreamSource(ChannelMaster master, String nodeUuid, String fileName, int bufferSize) throws IOException {
@@ -163,8 +163,7 @@ public class StreamSource extends SourceHandler {
                 messageQueue.put(StreamService.CLOSE_BYTES);
                 break;
             case StreamService.MODE_FAIL:
-                String errorMEssage = Bytes.toString(Bytes.readFully(in));
-                err = new IOException(errorMEssage);
+                err = Bytes.toString(Bytes.readFully(in));
                 messageQueue.put(StreamService.FAIL_BYTES);
                 break;
             default:
@@ -183,7 +182,7 @@ public class StreamSource extends SourceHandler {
     public void channelClosed(ChannelState state) {
         if (messageQueue != null) {
             try {
-                err = new IOException(StreamService.ERROR_CHANNEL_LOST);
+                err = StreamService.ERROR_CHANNEL_LOST;
                 messageQueue.put(StreamService.FAIL_BYTES);
             } catch (InterruptedException ie) {
                 Throwables.propagate(ie); // unfortunate but maintains api for now
@@ -237,11 +236,7 @@ public class StreamSource extends SourceHandler {
 
     public final void throwIfErrorSignal(byte[] data) throws IOException {
         if (data == StreamService.FAIL_BYTES) {
-            if (err != null) {
-                throw err;
-            } else {
-                throw new IOException("no error message available");
-            }
+            throw new IOException(err);
         }
     }
 
@@ -284,7 +279,7 @@ public class StreamSource extends SourceHandler {
                       .add("moreRequests", moreRequests)
                       .add("recvBytes", recvBytes)
                       .add("closeSent", closeSent)
-                      .add("err.message", (err == null) ? "(err is null)" : err.getMessage())
+                      .add("err", err)
                       .toString();
     }
 }
