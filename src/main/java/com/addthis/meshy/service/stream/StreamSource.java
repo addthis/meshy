@@ -226,7 +226,7 @@ public class StreamSource extends SourceHandler {
     }
 
     public final boolean isCloseSignal(byte[] data) {
-        if (data.length == 0) {
+        if ((data.length == 0) && (data != StreamService.FAIL_BYTES)) {
             if (data != StreamService.CLOSE_BYTES) {
                 log.debug("size zero application layer data found");
             }

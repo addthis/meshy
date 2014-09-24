@@ -106,13 +106,13 @@ public class SourceInputStream extends InputStream {
                     }
                 }
                 source.performBufferAccounting(data);
+                source.throwIfErrorSignal(data);
                 if (source.isCloseSignal(data)) {
                     log.trace("{} fill exit on 0 bytes", this);
                     currentData = data;
                     done = true;
                     return false;
                 }
-                source.throwIfErrorSignal(data);
                 log.trace("{} fill take={}", this, data.length);
             } catch (InterruptedException ex) {
                 log.warn("{} close on stream service interrupted", this);
