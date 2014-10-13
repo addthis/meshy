@@ -39,7 +39,7 @@ public class TestMesh {
 
     protected static final Logger log = LoggerFactory.getLogger(TestMesh.class);
     protected static final DecimalFormat num = new DecimalFormat("0,000");
-    protected static AtomicInteger nextPort = new AtomicInteger((int) ((new Random().nextFloat()) * 5000) + 5000);
+    protected static final AtomicInteger nextPort = new AtomicInteger((int) ((new Random().nextFloat()) * 5000) + 5000);
 
     static {
         System.setProperty("meshy.autoMesh", "false");
