@@ -14,7 +14,9 @@
 package com.addthis.meshy;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -29,12 +31,15 @@ import com.addthis.meshy.netty.DummyChannelGroup;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.channel.ChannelException;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.group.ChannelGroupFuture;
 import org.jboss.netty.channel.group.ChannelGroupFutureListener;
 import org.jboss.netty.channel.group.DefaultChannelGroupFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 
 public abstract class SourceHandler implements SessionHandler {
@@ -74,6 +79,7 @@ public abstract class SourceHandler implements SessionHandler {
         }
     };
 
+    private final Class<? extends TargetHandler> targetClass;
     private final String className = getClass().getName();
     private final String shortName = className.substring(className.lastIndexOf(".") + 1);
     private final AtomicBoolean sent = new AtomicBoolean(false);
@@ -87,16 +93,59 @@ public abstract class SourceHandler implements SessionHandler {
     private long readTime;
     private long readTimeout;
     private long completeTimeout;
-    private Set<Channel> channels;
+    protected Set<Channel> channels;
+
+    /**
+     * This constructor does not perform initialization during construction and therefore does not escape "this".
+     * The boolean parameter is expected to always be true and is only included to differentiate the signature from
+     * the otherwise identical constructor that does escape "this".
+     */
+    protected SourceHandler(ChannelMaster master,
+                            Class<? extends TargetHandler> targetClass,
+                            /* should always be true */ boolean skipInit) {
+        checkArgument(skipInit, "skipInit must always be true");
+        this.master = master;
+        this.targetClass = targetClass;
+    }
 
     public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass) {
         this(master, targetClass, MeshyConstants.LINK_ALL);
     }
 
-    // TODO: more sane construction
     public SourceHandler(ChannelMaster master, Class<? extends TargetHandler> targetClass, String targetUuid) {
-        this.master = master;
-        master.createSession(this, targetClass, targetUuid);
+        this(master, targetClass, true);
+        start(targetUuid);
+    }
+
+    protected final void start() {
+        start(MeshyConstants.LINK_ALL);
+    }
+
+    protected void start(String targetUuid) {
+        this.readTime = JitterClock.globalTime();
+        Collection<ChannelState> matches = master.getChannels(targetUuid);
+        if (matches.isEmpty()) {
+            throw new ChannelException("no matching mesh peers");
+        }
+        this.session = master.newSession();
+        Set<Channel> group = new HashSet<>(matches.size());
+        for (ChannelState state : matches) {
+            group.add(state.getChannel());
+        }
+        this.channels = Collections.synchronizedSet(group);
+        this.targetHandler = master.targetHandlerId(targetClass);
+        setReadTimeout(DEFAULT_RESPONSE_TIMEOUT);
+        setCompleteTimeout(DEFAULT_COMPLETE_TIMEOUT);
+        activeSources.add(this);
+        for (ChannelState state : matches) {
+            /* add channel callback path to source */
+            state.addSourceHandler(session, this);
+            if (!state.getChannel().isOpen()) {
+                channels.remove(state.getChannel()); // may or may not be needed
+            }
+        }
+        log.debug("{} start target={} uuid={} group={} sessionID={}",
+                  this, targetHandler, targetUuid, channels, session);
     }
 
     @Override
@@ -126,16 +175,6 @@ public abstract class SourceHandler implements SessionHandler {
 
     public ChannelMaster getChannelMaster() {
         return master;
-    }
-
-    public void init(int session, int targetHandler, Set<Channel> group) {
-        this.readTime = JitterClock.globalTime();
-        this.session = session;
-        this.channels = group;
-        this.targetHandler = targetHandler;
-        setReadTimeout(DEFAULT_RESPONSE_TIMEOUT);
-        setCompleteTimeout(DEFAULT_COMPLETE_TIMEOUT);
-        activeSources.add(this);
     }
 
     public void setReadTimeout(int seconds) {

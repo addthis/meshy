@@ -134,14 +134,12 @@ public class MeshyClient extends Meshy {
         return fileSource.getFileList();
     }
 
-    /**
-     * async version
-     */
-    public void listFiles(final String paths[], final ListCallback callback) throws IOException {
+    /** async version */
+    public void listFiles(final String[] paths, final ListCallback callback) throws IOException {
         if (closed.get()) {
             throw new IOException("client connection closed");
         }
-        FileSource fileSource = new FileSource(this, paths) {
+        FileSource fileSource = new FileSource(this) {
             @Override
             public void receiveReference(FileReference ref) {
                 callback.receiveReference(ref);
@@ -152,6 +150,7 @@ public class MeshyClient extends Meshy {
                 callback.receiveReferenceComplete();
             }
         };
+        fileSource.requestRemoteFiles(paths);
     }
 
     public SourceInputStream readFile(FileReference ref) throws IOException {

@@ -25,11 +25,14 @@ import com.addthis.basis.util.Strings;
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
+import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.SourceHandler;
 
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.Preconditions.checkState;
 
 public class FileSource extends SourceHandler {
 
@@ -37,43 +40,50 @@ public class FileSource extends SourceHandler {
     static final boolean traceComplete = Parameter.boolValue("meshy.finder.debug.complete", false);
 
     private final LinkedList<FileReference> list = new LinkedList<>();
-    private final String[] fileRequest;
-    private FileReferenceFilter filter;
+    protected String[] fileRequest;
+    protected FileReferenceFilter filter;
 
-    public FileSource(ChannelMaster master, String files[]) {
-        super(master, FileTarget.class);
-        requestFiles("local", files);
-        fileRequest = files;
+    public FileSource(ChannelMaster master) {
+        super(master, FileTarget.class, true);
     }
 
-    public FileSource(ChannelMaster master, String files[], String scope) {
-        super(master, FileTarget.class);
+    public FileSource(ChannelMaster master, String[] files) {
+        this(master);
+        requestRemoteFiles(files);
+    }
+
+    public FileSource(ChannelMaster master, String[] files, String scope) {
+        this(master);
         requestFiles(scope, files);
-        fileRequest = files;
     }
 
-    public FileSource(ChannelMaster master, String files[], FileReferenceFilter filter) {
-        super(master, FileTarget.class);
+    public FileSource(ChannelMaster master, String[] files, FileReferenceFilter filter) {
+        this(master);
         this.filter = filter;
-        requestFiles("local", files);
-        fileRequest = files;
+        requestRemoteFiles(files);
     }
 
-    /**
-     * used for internal proxy through mesh
-     */
-    public FileSource(ChannelMaster master, String targetUuid, String files[]) {
-        super(master, FileTarget.class, targetUuid);
-        requestFiles("remote", files);
-        fileRequest = files;
+    public void requestRemoteFiles(String... matches) {
+        requestFiles("local", matches);
     }
 
-    @Override
-    public String toString() {
-        return super.toString() + '(' + (fileRequest != null ? Strings.join(fileRequest, ",") : "-") + ')';
+    public void requestRemoteFilesWithUpdates(String... matches) {
+        requestFiles("localF", matches);
     }
 
-    private void requestFiles(String scope, String... matches) {
+    public void requestLocalFiles(String... matches) {
+        start(MeshyConstants.LINK_NAMED);
+        requestFilesPostStart("remote", matches);
+    }
+
+    public void requestFiles(String scope, String... matches) {
+        start();
+        requestFilesPostStart(scope, matches);
+    }
+
+    private void requestFilesPostStart(String scope, String... matches) {
+        checkState(fileRequest == null, "file search request already started");
+        this.fileRequest = matches;
         send(Bytes.toBytes(scope));
         log.debug("{} scope={}", this, scope);
         for (String match : matches) {
@@ -81,6 +91,11 @@ public class FileSource extends SourceHandler {
             send(Bytes.toBytes(match));
         }
         sendComplete();
+    }
+
+    @Override
+    public String toString() {
+        return super.toString() + '(' + (fileRequest != null ? Strings.join(fileRequest, ",") : "-") + ')';
     }
 
     public Collection<FileReference> getFileList() {

@@ -20,21 +20,14 @@ public interface ChannelMaster {
 
     String getUUID();
 
-    /**
-     * session handler factory
-     */
+    /** session handler factory */
     TargetHandler createHandler(int type);
 
-    /**
-     * init source handler connection group
-     *
-     * @param sourceHandler handles response packets bound to this session
-     * @param targetHandler handler created on remote end
-     * @param targetUuid    null for local, ""/empty for all, non-empty for single host
-     */
-    void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid);
-
     Collection<ChannelState> getChannels(String nameFilter);
+
+    int newSession();
+
+    int targetHandlerId(Class<? extends TargetHandler> targetHandler);
 
     // metrics
 

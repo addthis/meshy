@@ -25,7 +25,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -43,7 +42,6 @@ import com.addthis.basis.util.Strings;
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
-import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TargetHandler;
 import com.addthis.meshy.VirtualFileFilter;
@@ -190,9 +188,11 @@ public class FileTarget extends TargetHandler implements Runnable {
             if (remote) { //yes, ask other meshy nodes (and ourselves)
                 forwardMetaData = "localF".equals(scope);
                 try {
-                    fileSource = new ForwardingFileSource(getChannelMaster(), MeshyConstants.LINK_NAMED,
-                            paths.toArray(new String[paths.size()]));
+                    fileSource = new ForwardingFileSource(getChannelMaster());
+                    fileSource.requestLocalFiles(paths.toArray(new String[paths.size()]));
                 } catch (ChannelException ignored) {
+                    // TODO: handle without using nullity as a flag
+                    fileSource = null;
                     // can happen when there are no remote hosts
                     if (forwardMetaData) {
                         forwardPeerList(Collections.<Channel>emptyList());
@@ -480,15 +480,10 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     private class ForwardingFileSource extends FileSource {
 
-        // must be initialized in init() because (unfortunately) it may be required before
-        // the parent class's constructor finishes. init() is called from the parent class's
-        // constructor; allowing us to hack in some sub-class construction. This is why
-        // constructors should do as little as possible, and really, _really_ not publish
-        // incomplete objects to other threads.
-        private AtomicBoolean doComplete;
+        private final AtomicBoolean doComplete = new AtomicBoolean();
 
-        public ForwardingFileSource(ChannelMaster master, String nameFilter, String[] files) {
-            super(master, nameFilter, files);
+        public ForwardingFileSource(ChannelMaster master) {
+            super(master);
         }
 
         @Override
@@ -497,13 +492,11 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
 
         @Override
-        public void init(int session, int targetHandler, Set<Channel> group) {
-            doComplete = new AtomicBoolean();
+        protected void start(String targetUuid) {
+            super.start(targetUuid);
             if (forwardMetaData) {
-                //directly get size from group since channels is not set yet;
-                forwardPeerList(group);
+                forwardPeerList(channels);
             }
-            super.init(session, targetHandler, group);
         }
 
         // called per individual remote mesh node response complete

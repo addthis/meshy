@@ -242,31 +242,12 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
     }
 
-    /*
-     * gather connections related to the targetUuid requested
-     */
-    @Override
-    public void createSession(SourceHandler sourceHandler, Class<? extends TargetHandler> targetHandler, String targetUuid) {
-        Collection<ChannelState> matches = getChannels(targetUuid);
-        if (matches.isEmpty()) {
-            throw new ChannelException("no matching mesh peers");
-        }
-        int sessionID = nextSession.incrementAndGet();
-        Set<Channel> group = new HashSet<>(matches.size());
-        for (ChannelState state : matches) {
-            group.add(state.getChannel());
-        }
-        group = Collections.synchronizedSet(group);
-        sourceHandler.init(sessionID, handlerIdMap.get(targetHandler), group);
-        for (ChannelState state : matches) {
-            /* add channel callback path to source */
-            state.addSourceHandler(sessionID, sourceHandler);
-            if (!state.getChannel().isOpen()) {
-                group.remove(state.getChannel()); // may or may not be needed
-            }
-        }
-        log.debug("{} createSession {} target={} uuid={} group={} sessionID={}",
-                this, sourceHandler, targetHandler, targetUuid, group, sessionID);
+    @Override public int newSession() {
+        return nextSession.incrementAndGet();
+    }
+
+    @Override public int targetHandlerId(Class<? extends TargetHandler> targetHandler) {
+        return handlerIdMap.get(targetHandler);
     }
 
     /**
