@@ -19,7 +19,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
-import com.addthis.muxy.ReadMuxFile;
+import com.addthis.muxy.MuxFile;
 import com.addthis.muxy.ReadMuxFileDirectory;
 import com.addthis.muxy.ReadMuxFileDirectoryCache;
 
@@ -55,7 +55,7 @@ public class LocalFileHandlerMux implements LocalFileHandler {
     public Iterator<VirtualFileReference> listFiles(File dir, VirtualFileFilter filter) {
         try {
             LinkedList<VirtualFileReference> list = new LinkedList<>();
-            for (ReadMuxFile meta : ReadMuxFileDirectoryCache.listFiles(dir)) {
+            for (MuxFile meta : ReadMuxFileDirectoryCache.listFiles(dir)) {
                 VirtualFileReference ref = new MuxFileReference(meta);
                 if (filter == null || filter.accept(ref)) {
                     list.add(ref);
@@ -83,9 +83,9 @@ public class LocalFileHandlerMux implements LocalFileHandler {
      */
     private static final class MuxFileReference implements VirtualFileReference {
 
-        private final ReadMuxFile meta;
+        private final MuxFile meta;
 
-        MuxFileReference(ReadMuxFile meta) {
+        MuxFileReference(MuxFile meta) {
             this.meta = meta;
         }
 

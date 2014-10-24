@@ -17,8 +17,6 @@ import java.io.ByteArrayInputStream;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -57,14 +55,6 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     static final int MAX_OPEN_STREAMS = Parameter.intValue("meshy.stream.maxopen", 1000);
     /* create N sender threads ? */
     static final int SENDER_THREADS   = Parameter.intValue("meshy.senders", 1);
-
-    protected static final ConcurrentMap<String, VirtualFileReference> openStreamMap = new ConcurrentHashMap<>();
-
-    public static void debugOpenTargets() {
-        for (Map.Entry<String, VirtualFileReference> e : openStreamMap.entrySet()) {
-            log.info("OPEN: {} = {}", e.getKey(), e.getValue());
-        }
-    }
 
     static final LinkedBlockingQueue<Runnable> senderQueue =
             new LinkedBlockingQueue<>(MAX_OPEN_STREAMS - SENDER_THREADS);
@@ -214,7 +204,6 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     StreamService.newStreamMeter.mark();
                     StreamService.openStreams.inc();
                     StreamService.newOpenStreams.incrementAndGet();
-                    openStreamMap.put(fileName, ref);
                     log.trace("{} start local={}", this, fileIn);
                 } else {
                     try {
@@ -294,7 +283,6 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
             fileIn.close();
             StreamService.closedStreams.incrementAndGet();
             StreamService.openStreams.dec();
-            openStreamMap.remove(fileName);
         }
     }
 

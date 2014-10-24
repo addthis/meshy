@@ -26,7 +26,6 @@ import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.service.file.FileStats;
 import com.addthis.meshy.service.stream.StreamStats;
-import com.addthis.meshy.service.stream.StreamTarget;
 import com.addthis.muxy.ReadMuxFileDirectoryCache;
 
 import com.yammer.metrics.core.VirtualMachineMetrics;
@@ -217,7 +216,11 @@ public class MeshyServerGroup {
             statsCountdown = 2;
         }
         if (gc.timeSpent > Meshy.STATS_INTERVAL) {
-            StreamTarget.debugOpenTargets();
+            for (MeshyServer server : byServer) {
+                for (ChannelState channelState : server.connectedChannels) {
+                    channelState.debugSessions();
+                }
+            }
         }
     }
 

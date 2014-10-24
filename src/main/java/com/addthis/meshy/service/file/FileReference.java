@@ -89,10 +89,7 @@ public class FileReference {
             return false;
         }
         FileReference otherReference = (FileReference) other;
-        if (this.name == null && otherReference.name != null) {
-            return false;
-        }
-        if (name != null && !name.equals(otherReference.name)) {
+        if (!Objects.equal(name, otherReference.name)) {
             return false;
         }
         if (lastModified != otherReference.lastModified) {
@@ -101,10 +98,7 @@ public class FileReference {
         if (size != otherReference.size) {
             return false;
         }
-        if (this.hostUUID == null && otherReference.hostUUID != null) {
-            return false;
-        }
-        if (hostUUID != null && !hostUUID.equals(otherReference.hostUUID)) {
+        if (!Objects.equal(hostUUID, otherReference.hostUUID)) {
             return false;
         }
         return true;

@@ -16,9 +16,9 @@ package com.addthis.meshy;
 import java.net.InetSocketAddress;
 
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import com.addthis.basis.collect.ConcurrentHashMapV8;
 import com.addthis.basis.util.Parameter;
 
 import com.google.common.base.Objects;
@@ -81,8 +81,8 @@ public class ChannelState {
         bufferFactory.returnBuffer(buffer);
     }
 
-    private final ConcurrentMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMapV8<>();
-    private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMapV8<>();
+    private final ConcurrentMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMap<>();
     private final ChannelMaster master;
     private final Channel channel;
 

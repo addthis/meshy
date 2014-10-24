@@ -26,8 +26,6 @@ import org.slf4j.LoggerFactory;
 public abstract class TargetHandler implements SessionHandler {
 
     protected static final Logger log = LoggerFactory.getLogger(TargetHandler.class);
-    private final String className = getClass().getName();
-    private final String shortName = className.substring(className.lastIndexOf(".") + 1);
     private final AtomicBoolean complete = new AtomicBoolean(false);
     private final AtomicBoolean waited = new AtomicBoolean(false);
     private final CountDownLatch latch = new CountDownLatch(1);
@@ -47,7 +45,6 @@ public abstract class TargetHandler implements SessionHandler {
 
     protected Objects.ToStringHelper toStringHelper() {
         return Objects.toStringHelper(this)
-                .add("shortName", shortName)
                 .add("channelState", channelState.getName())
                 .add("session", session)
                 .add("complete", complete)
@@ -76,17 +73,17 @@ public abstract class TargetHandler implements SessionHandler {
         channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, from, length), null, length);
     }
 
-    public boolean send(byte data[]) {
+    public boolean send(byte[] data) {
         return send(data, null);
     }
 
     @Override
-    public boolean send(byte data[], SendWatcher watcher) {
+    public boolean send(byte[] data, SendWatcher watcher) {
         log.trace("{} send {}", this, data.length);
         return channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, data), watcher, data.length);
     }
 
-    public void send(byte data[], int off, int len, SendWatcher watcher) {
+    public void send(byte[] data, int off, int len, SendWatcher watcher) {
         log.trace("{} send {} o={} l={}", this, data.length, off, len);
         channelState.send(ChannelState.allocateSendBuffer(MeshyConstants.KEY_RESPONSE, session, data, off, len), watcher, len);
     }
