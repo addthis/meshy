@@ -26,7 +26,6 @@ import com.google.common.base.Objects;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.slf4j.Logger;
@@ -133,14 +132,11 @@ public class ChannelState {
     public boolean send(final ChannelBuffer sendBuffer, final SendWatcher watcher, final int reportBytes) {
         if (channel.isOpen()) {
             ChannelFuture future = channel.write(sendBuffer);
-            future.addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture ignored) throws Exception {
-                    master.sentBytes(reportBytes);
-                    returnSendBuffer(sendBuffer);
-                    if (watcher != null) {
-                        watcher.sendFinished(reportBytes);
-                    }
+            future.addListener(ignored -> {
+                master.sentBytes(reportBytes);
+                returnSendBuffer(sendBuffer);
+                if (watcher != null) {
+                    watcher.sendFinished(reportBytes);
                 }
             });
             return true;
@@ -153,7 +149,7 @@ public class ChannelState {
                  * example is StreamService when EOF framing tells the
                  * client we're done before sendComplete() framing does.
                  */
-                log.info("{} writing [{}] to dead channel", this, reportBytes);
+                log.debug("{} writing [{}] to dead channel", this, reportBytes);
                 if (watcher != null) {
                     /**
                      * for accounting, rate limiting reasons, we have to report these as sent.
