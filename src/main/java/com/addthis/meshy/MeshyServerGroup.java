@@ -217,8 +217,10 @@ public class MeshyServerGroup {
         }
         if (gc.timeSpent > Meshy.STATS_INTERVAL) {
             for (MeshyServer server : byServer) {
-                for (ChannelState channelState : server.connectedChannels) {
-                    channelState.debugSessions();
+                synchronized (server.connectedChannels) {
+                    for (ChannelState channelState : server.connectedChannels) {
+                        channelState.debugSessions();
+                    }
                 }
             }
         }
