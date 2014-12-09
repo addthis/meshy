@@ -13,16 +13,18 @@
  */
 package com.addthis.meshy.service.message;
 
+import javax.annotation.Nullable;
+
 import java.io.OutputStream;
 
 import java.util.Map;
 
-public abstract class InternalHandler implements TopicSender {
+@FunctionalInterface
+public interface InternalHandler extends TopicSender {
 
-    @Override
-    public OutputStream sendMessage(String topic) {
+    @Nullable @Override default OutputStream sendMessage(String topic) {
         return null;
     }
 
-    public abstract byte[] handleMessageRequest(String fileName, Map<String, String> options);
+    abstract byte[] handleMessageRequest(String fileName, Map<String, String> options);
 }
