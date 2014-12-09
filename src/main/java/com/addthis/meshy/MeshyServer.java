@@ -191,7 +191,7 @@ public class MeshyServer extends Meshy {
         serverFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
                                                           Executors.newCachedThreadPool());
         ServerBootstrap bootstrap = new ServerBootstrap(serverFactory);
-        bootstrap.setPipelineFactory(() -> Channels.pipeline(new MeshyChannelHandler()));
+        bootstrap.setPipelineFactory(() -> Channels.pipeline(new MeshyChannelHandler(this)));
         // for parent channel
         bootstrap.setOption("connectTimeoutMillis", 30000);
         bootstrap.setOption("reuseAddress", true);
@@ -310,8 +310,8 @@ public class MeshyServer extends Meshy {
     }
 
     @Override
-    protected void connectChannel(Channel channel, ChannelState channelState) {
-        super.connectChannel(channel, channelState);
+    protected void channelConnected(Channel channel, ChannelState channelState) {
+        super.channelConnected(channel, channelState);
         /* servers peer with other servers once a channel comes up */
         // assign unique id (local or remote inferred)
         channelState.setName("temp-uuid-" + nextSession.incrementAndGet());

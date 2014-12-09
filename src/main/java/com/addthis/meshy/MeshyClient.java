@@ -101,8 +101,8 @@ public class MeshyClient extends Meshy {
     }
 
     @Override
-    protected void connectChannel(Channel channel, ChannelState channelState) {
-        super.connectChannel(channel, channelState);
+    protected void channelConnected(Channel channel, ChannelState channelState) {
+        super.channelConnected(channel, channelState);
         clientState = channelState;
         clientInitGate.release();
     }

@@ -35,13 +35,18 @@ import com.addthis.meshy.service.peer.PeerService;
 
 import com.google.common.collect.Lists;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 class AutoMeshTask implements Runnable {
+    protected static final Logger log = LoggerFactory.getLogger(AutoMeshTask.class);
+
     private static final String secret = Parameter.value("meshy.secret");
 
-    private final int timeout;
-    private final int port;
     private final MeshyServer meshyServer;
     private final MeshyServerGroup group;
+    private final int timeout;
+    private final int port;
 
     public AutoMeshTask(MeshyServer meshyServer, MeshyServerGroup group, int timeout, int port) {
         this.meshyServer = meshyServer;
@@ -59,13 +64,13 @@ class AutoMeshTask implements Runnable {
             server.setBroadcast(true);
             server.setSoTimeout(timeout);
             server.setReuseAddress(false);
-            MeshyServer.log.info("{} AutoMesh enabled server={}", meshyServer, server.getLocalAddress());
+            log.info("{} AutoMesh enabled server={}", meshyServer, server.getLocalAddress());
             long lastTransmit = 0;
             while (true) {
                 long time = System.currentTimeMillis();
                 if (time - lastTransmit > timeout) {
-                    if (MeshyServer.log.isDebugEnabled()) {
-                        MeshyServer.log.debug("{} AutoMesh.xmit {} members", meshyServer, group.getMembers().length);
+                    if (log.isDebugEnabled()) {
+                        log.debug("{} AutoMesh.xmit {} members", meshyServer, group.getMembers().length);
                     }
                     server.send(encode());
                     lastTransmit = time;
@@ -73,22 +78,22 @@ class AutoMeshTask implements Runnable {
                 try {
                     DatagramPacket packet = new DatagramPacket(new byte[4096], 4096);
                     server.receive(packet);
-                    MeshyServer.log.debug("{} AutoMesh.recv from: {} size={}",
+                    log.debug("{} AutoMesh.recv from: {} size={}",
                               meshyServer, packet.getAddress(), packet.getLength());
                     if (packet.getLength() > 0) {
                         for (NodeInfo info : decode(packet)) {
-                            MeshyServer.log.debug("{} AutoMesh.recv: {} : {} from {}",
+                            log.debug("{} AutoMesh.recv: {} : {} from {}",
                                       meshyServer, info.uuid, info.address, info.address);
                             meshyServer.connectToPeer(info.uuid, info.address);
                         }
                     }
                 } catch (SocketTimeoutException sto) {
                     // expected ... ignore
-                    MeshyServer.log.debug("{} AutoMesh listen timeout", meshyServer);
+                    log.debug("{} AutoMesh listen timeout", meshyServer);
                 }
             }
         } catch (Exception e) {
-            MeshyServer.log.error("{} AutoMesh exit on {}", meshyServer, e, e);
+            log.error("{} AutoMesh exit on {}", meshyServer, e, e);
         }
     }
 
