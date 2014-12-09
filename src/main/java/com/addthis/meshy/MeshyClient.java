@@ -69,7 +69,7 @@ public class MeshyClient extends Meshy {
             throw new RuntimeException(ex);
         }
         if (log.isDebugEnabled()) {
-            log.debug("client [" + getUUID() + "] connected to " + address);
+            log.debug("client [{}] connected to {}", getUUID(), address);
         }
     }
 

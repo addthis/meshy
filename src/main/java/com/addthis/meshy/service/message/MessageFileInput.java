@@ -114,7 +114,8 @@ class MessageFileInput implements VirtualFileInput, TargetListener {
             data = Bytes.readFully(in);
             gate.release();
         } else {
-            MessageFileSystem.log.warn("received reply on invalid topic topic=" + topic + " data=" + Arrays.toString(data));
+            MessageFileSystem.log.warn("received reply on invalid topic topic={} data={}", topic,
+                                       Arrays.toString(data));
         }
     }
 

@@ -87,13 +87,13 @@ public class MessageFileProvider implements TopicListener {
             }
             listener.requestContents(fileName, options, source.sendMessage(topic));
         } else {
-            log.info("receive for topic with no listener: " + fileName);
+            log.info("receive for topic with no listener: {}", fileName);
         }
     }
 
     @Override
     public void linkDown() {
         // subclass and override to hide this message
-        log.info("link down source=" + source + " listeners=" + listeners);
+        log.info("link down source={} listeners={}", source, listeners);
     }
 }

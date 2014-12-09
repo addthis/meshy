@@ -42,7 +42,7 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     public static void registerListener(String topic, TargetListener listener) {
         synchronized (targetListeners) {
             if (targetListeners.put(topic, listener) != null) {
-                log.warn("WARNING: override listener for " + topic);
+                log.warn("WARNING: override listener for {}", topic);
             }
         }
     }

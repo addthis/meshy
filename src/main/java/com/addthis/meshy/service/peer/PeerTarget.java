@@ -25,7 +25,7 @@ public class PeerTarget extends TargetHandler {
     @Override
     public void receive(int length, ChannelBuffer buffer) throws Exception {
         if (log.isDebugEnabled()) {
-            log.debug(this + " decode from " + getChannelState().getChannelRemoteAddress());
+            log.debug("{} decode from {}", this, getChannelState().getChannelRemoteAddress());
         }
         PeerService.decodePeer(getChannelMaster(), getChannelState(), Meshy.getInput(length, buffer));
     }

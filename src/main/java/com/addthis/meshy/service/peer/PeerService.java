@@ -85,19 +85,20 @@ public final class PeerService {
             Bytes.writeString(master.getUUID(), out);
             encodeAddress(master.getLocalAddress(), out);
             if (log.isDebugEnabled()) {
-                log.debug(master + " encode peer remote=" + (me != null ? me.getChannel().getRemoteAddress() : ""));
+                log.debug("{} encode peer remote={}", master, me != null ? me.getChannel().getRemoteAddress() : "");
             }
             for (ChannelState channelState : master.getChannels(MeshyConstants.LINK_NAMED)) {
                 Bytes.writeString(channelState.getName(), out);
                 encodeAddress(channelState.getRemoteAddress(), out);
                 if (log.isDebugEnabled()) {
-                    log.debug(master + " encoded " + channelState.getName() + " @ " + channelState.getChannel().getRemoteAddress());
+                    log.debug("{} encoded {} @ {}", master, channelState.getName(),
+                              channelState.getChannel().getRemoteAddress());
                 }
             }
             for (MeshyServer member : master.getMembers()) {
                 if (member != master && shouldEncode(member.getLocalAddress())) {
                     if (log.isTraceEnabled()) {
-                        log.trace("encode MEMBER: " + member.getUUID() + " / " + member.getLocalAddress());
+                        log.trace("encode MEMBER: {} / {}", member.getUUID(), member.getLocalAddress());
                     }
                     Bytes.writeString(member.getUUID(), out);
                     encodeAddress(member.getLocalAddress(), out);
@@ -124,7 +125,8 @@ public final class PeerService {
             }
             me.setRemoteAddress(sockAddr);
             if (log.isDebugEnabled()) {
-                log.debug(master + " decode peer " + me.getChannel().getRemoteAddress() + ":" + me.getName() + ":" + me.getRemoteAddress());
+                log.debug("{} decode peer {}:{}:{}", master, me.getChannel().getRemoteAddress(), me.getName(),
+                          me.getRemoteAddress());
             }
             while (true) {
                 String peerUuid = Bytes.readString(in);
@@ -133,7 +135,7 @@ public final class PeerService {
                 }
                 InetSocketAddress peerAddress = decodeAddress(in);
                 if (log.isDebugEnabled()) {
-                    log.debug(master + " decoded " + peerUuid + " @ " + peerAddress);
+                    log.debug("{} decoded {} @ {}", master, peerUuid, peerAddress);
                 }
                 peerQueue.put(new PeerTuple(master, peerUuid, peerAddress));
             }

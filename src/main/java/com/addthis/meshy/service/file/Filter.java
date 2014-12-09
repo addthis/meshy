@@ -61,7 +61,7 @@ public class Filter implements VirtualFileFilter {
                             (end && fileName.endsWith(token)) ||
                             (fileName.equals(token));
         if (log.isTraceEnabled()) {
-            log.trace("accept? (" + ref + ") = " + ret);
+            log.trace("accept? ({}) = {}", ref, ret);
         }
         return ret;
     }

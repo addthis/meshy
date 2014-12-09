@@ -136,7 +136,7 @@ public class LocalFileSystem implements VirtualFileSystem {
             for (LocalFileHandler handler : handlers) {
                 if (handler.canHandleDirectory(ptr)) {
                     if (log.isDebugEnabled()) {
-                        log.debug("delegate " + ptr + " to " + handler);
+                        log.debug("delegate {} to {}", ptr, handler);
                     }
                     return handler.listFiles(ptr, filter);
                 }
@@ -152,7 +152,7 @@ public class LocalFileSystem implements VirtualFileSystem {
             File[] files = ptr.listFiles();
             if (files == null) {
                 if (log.isDebugEnabled()) {
-                    log.debug("no files for " + ptr);
+                    log.debug("no files for {}", ptr);
                 }
                 return null;
             }
@@ -164,7 +164,7 @@ public class LocalFileSystem implements VirtualFileSystem {
                 }
             }
             if (log.isDebugEnabled()) {
-                log.debug(ptr + " matched " + list.size());
+                log.debug("{} matched {}", ptr, list.size());
             }
             return list.iterator();
         }

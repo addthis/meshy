@@ -126,7 +126,7 @@ public class MeshyServer extends Meshy {
                     try {
                         load.add((VirtualFileSystem) (Class.forName(vm).newInstance()));
                     } catch (Throwable t) {
-                        log.error("failure loading VM " + vm, t);
+                        log.error("failure loading VM {}", vm, t);
                     }
                 }
             }
@@ -237,7 +237,7 @@ public class MeshyServer extends Meshy {
             startAutoMesh(serverPort, autoMeshTimeout);
         }
         serverUuid = super.getUUID() + "-" + port + (serverNetIf != null ? "-" + serverNetIf : "");
-        log.info("server [" + getUUID() + "] on " + port + " @ " + rootDir);
+        log.info("server [{}] on {} @ {}", getUUID(), port, rootDir);
         shutdownThread = new Thread() {
             public void run() {
                 log.info("Running meshy shutdown hook..");
@@ -350,7 +350,7 @@ public class MeshyServer extends Meshy {
         closeSemaphore.acquireUninterruptibly();
         try {
             if (!closeGuard.getAndSet(true)) {
-                log.debug(this + " exiting");
+                log.debug("{} exiting", this);
                 super.close();
                 if (serverFactory != null) {
                     serverFactory.releaseExternalResources();
@@ -393,13 +393,13 @@ public class MeshyServer extends Meshy {
     public void connectPeer(InetSocketAddress address) {
         ChannelFuture future = connectToPeer(null, address);
         if (future == null) {
-            log.info(MeshyServer.this + " peer connect returned null future to " + address);
+            log.info("{} peer connect returned null future to {}", MeshyServer.this, address);
             return;
         }
         /* wait for connection to complete */
         future.awaitUninterruptibly();
         if (!future.isSuccess()) {
-            log.warn(MeshyServer.this + " peer connect fail to " + address);
+            log.warn("{} peer connect fail to {}", MeshyServer.this, address);
         }
     }
 
@@ -434,12 +434,12 @@ public class MeshyServer extends Meshy {
         }
         updateLastEventTime();
         if (log.isDebugEnabled()) {
-            log.debug(MeshyServer.this + " request connect to " + peerUuid + " @ " + pAddr);
+            log.debug("{} request connect to {} @ {}", MeshyServer.this, peerUuid, pAddr);
         }
         /* skip peering with self (and other meshes started in the same vm) */
         if (peerUuid != null && group.hasUuid(peerUuid)) {
             if (log.isDebugEnabled()) {
-                log.debug(this + " skipping " + peerUuid + " .. it's me");
+                log.debug("{} skipping {} .. it's me", this, peerUuid);
             }
             return null;
         }
@@ -537,13 +537,13 @@ public class MeshyServer extends Meshy {
                     server.setBroadcast(true);
                     server.setSoTimeout(timeout);
                     server.setReuseAddress(false);
-                    log.info(MeshyServer.this + " AutoMesh enabled server=" + server.getLocalAddress());
+                    log.info("{} AutoMesh enabled server={}", MeshyServer.this, server.getLocalAddress());
                     long lastTransmit = 0;
                     while (true) {
                         long time = System.currentTimeMillis();
                         if (time - lastTransmit > timeout) {
                             if (log.isDebugEnabled()) {
-                                log.debug(MeshyServer.this + " AutoMesh.xmit " + group.getMembers().length + " members");
+                                log.debug("{} AutoMesh.xmit {} members", MeshyServer.this, group.getMembers().length);
                             }
                             server.send(encode());
                             lastTransmit = time;
@@ -552,12 +552,14 @@ public class MeshyServer extends Meshy {
                             DatagramPacket packet = new DatagramPacket(new byte[4096], 4096);
                             server.receive(packet);
                             if (log.isDebugEnabled()) {
-                                log.debug(MeshyServer.this + " AutoMesh.recv from: " + packet.getAddress() + " size=" + packet.getLength());
+                                log.debug("{} AutoMesh.recv from: {} size={}", MeshyServer.this, packet.getAddress(),
+                                          packet.getLength());
                             }
                             if (packet.getLength() > 0) {
                                 for (NodeInfo info : decode(packet)) {
                                     if (log.isDebugEnabled()) {
-                                        log.debug(MeshyServer.this + " AutoMesh.recv: " + info.uuid + " : " + info.address + " from " + info.address);
+                                        log.debug("{} AutoMesh.recv: {} : {} from {}", MeshyServer.this, info.uuid,
+                                                  info.address, info.address);
                                     }
                                     connectToPeer(info.uuid, info.address);
                                 }
@@ -565,12 +567,12 @@ public class MeshyServer extends Meshy {
                         } catch (SocketTimeoutException sto) {
                             // expected ... ignore
                             if (log.isDebugEnabled()) {
-                                log.debug(MeshyServer.this + " AutoMesh listen timeout");
+                                log.debug("{} AutoMesh listen timeout", MeshyServer.this);
                             }
                         }
                     }
                 } catch (Exception e) {
-                    log.error(MeshyServer.this + " AutoMesh exit on " + e, e);
+                    log.error("{} AutoMesh exit on {}", MeshyServer.this, e, e);
                 }
             }
 

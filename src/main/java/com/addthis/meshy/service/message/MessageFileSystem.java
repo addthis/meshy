@@ -109,7 +109,7 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
             String fullPath = Bytes.readString(in);
             updatePath(target, fullPath, add);
         } else {
-            log.warn("unhandled receive for topic=" + topic + " target=" + target);
+            log.warn("unhandled receive for topic={} target={}", topic, target);
         }
     }
 

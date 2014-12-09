@@ -69,7 +69,7 @@ public abstract class SourceHandler implements SessionHandler {
                 }
                 probeActiveSources();
             }
-            log.info(this + " exiting");
+            log.info("{} exiting", this);
         }
 
         private void probeActiveSources() {

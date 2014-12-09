@@ -65,7 +65,8 @@ public class BufferAllocator {
             size *= 2;
         }
         if (log.isDebugEnabled()) {
-            log.debug("BufferCache: enabled=" + ENABLED + " direct=" + DIRECT + " max=" + MAX_CACHE_SIZE + " sleep=" + CACHE_OVERAGE_SLEEP + " pools=" + Strings.join(pools, ","));
+            log.debug("BufferCache: enabled={} direct={} max={} sleep={} pools={}", ENABLED, DIRECT, MAX_CACHE_SIZE,
+                      CACHE_OVERAGE_SLEEP, Strings.join(pools, ","));
         }
     }
 
@@ -74,7 +75,7 @@ public class BufferAllocator {
             return bufferFactory.getBuffer(size);
         }
         if (log.isTraceEnabled()) {
-            log.trace("allocate buffer " + size);
+            log.trace("allocate buffer {}", size);
         }
         for (SizedPool pool : pools) {
             if (size <= pool.size) {
@@ -92,7 +93,7 @@ public class BufferAllocator {
         for (int i = 0; i < pools.length; i++) {
             if (capacity == pools[i].size) {
                 if (log.isTraceEnabled()) {
-                    log.debug("return buffer " + capacity + " [" + i + "]");
+                    log.debug("return buffer {} [{}]", capacity, i);
                 }
                 pools[i].returnBuffer(done);
                 return;

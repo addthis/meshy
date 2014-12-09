@@ -265,7 +265,7 @@ public class FileTarget extends TargetHandler implements Runnable {
     private void walk(final WalkState state, final String vfsKey, final VirtualFileReference ref, final VFSPath path) throws Exception {
         String token = path.getToken();
         if (log.isTraceEnabled()) {
-            log.trace("walk token=" + token + " ref=" + ref + " path=" + path);
+            log.trace("walk token={} ref={} path={}", token, ref, path);
         }
         final boolean all = "*".equals(token);
         final boolean startsWith = !all && token.endsWith("*");
@@ -283,7 +283,7 @@ public class FileTarget extends TargetHandler implements Runnable {
         if (asDir) {
             Iterator<VirtualFileReference> files = ref.listFiles(filter);
             if (log.isTraceEnabled()) {
-                log.trace("asDir=true filter=" + filter + " hostUuid=" + hostUuid + " files=" + files);
+                log.trace("asDir=true filter={} hostUuid={} files={}", filter, hostUuid, files);
             }
             if (files == null) {
                 return;
@@ -316,13 +316,13 @@ public class FileTarget extends TargetHandler implements Runnable {
                     cacheLine = cache.get(pathString);
                     if (cacheLine == null || !cacheLine.isValid()) {
                         if (log.isTraceEnabled()) {
-                            log.trace("new cache-line for " + pathString + " was " + cacheLine);
+                            log.trace("new cache-line for {} was {}", pathString, cacheLine);
                         }
                         cacheLine = new VFSDirCacheLine(ref);
                         cache.put(pathString, cacheLine);
                     } else {
                         if (log.isTraceEnabled()) {
-                            log.trace("old cache-line for " + pathString + " = " + cacheLine);
+                            log.trace("old cache-line for {} = {}", pathString, cacheLine);
                         }
                         cacheHits.incrementAndGet();
                         cacheHitsMeter.mark();
@@ -334,7 +334,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                     if (!cacheLine.lines.isEmpty()) {
                         for (FileReference cacheRef : cacheLine.lines) {
                             if (log.isTraceEnabled()) {
-                                log.trace("cache.send " + ref + " from " + cacheRef + " key=" + pathString);
+                                log.trace("cache.send {} from {} key={}", ref, cacheRef, pathString);
                             }
                             send(cacheRef.encode(hostUuid));
                             found.incrementAndGet();
@@ -345,7 +345,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                 /* otherwise populate cache line */
                     Iterator<VirtualFileReference> files = ref.listFiles(filter);
                     if (log.isTraceEnabled()) {
-                        log.trace("asDir=false filter=" + filter + " hostUuid=" + hostUuid + " files=" + files);
+                        log.trace("asDir=false filter={} hostUuid={} files={}", filter, hostUuid, files);
                     }
                     if (files == null) {
                         return;
@@ -355,7 +355,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                         FileReference cacheRef = new FileReference(path.getRealPath(), next);
                         cacheLine.lines.add(cacheRef);
                         if (log.isTraceEnabled()) {
-                            log.trace("local.send " + cacheRef + " cache to " + pathString + " in " + cacheLine.hashCode());
+                            log.trace("local.send {} cache to {} in {}", cacheRef, pathString, cacheLine.hashCode());
                         }
                         send(cacheRef.encode(hostUuid));
                         found.incrementAndGet();
@@ -365,7 +365,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             } else {
                 Iterator<VirtualFileReference> files = ref.listFiles(filter);
                 if (log.isTraceEnabled()) {
-                    log.trace("asDir=false filter=" + filter + " hostUuid=" + hostUuid + " files=" + files);
+                    log.trace("asDir=false filter={} hostUuid={} files={}", filter, hostUuid, files);
                 }
                 if (files == null) {
                     return;
@@ -385,7 +385,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                     if (pathString == null) {
                         pathString = Strings.cat(vfsKey, ":", path.getRealPath(), "[", token, "]");
                     }
-                    log.warn("slow cache fill (" + time + ") for " + pathString + " {" + state + '}');
+                    log.warn("slow cache fill ({}) for {} {{}" + '}', time, pathString, state);
                 }
             }
         }

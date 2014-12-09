@@ -346,19 +346,21 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
 
     private int doSendMore(SendWatcher sender) {
         if (log.isTraceEnabled()) {
-            log.trace(this + " sendMore for " + sender + " rem=" + sendRemain + " closed=" + closed + " streamComplete=" + streamComplete + " fileIn=" + fileIn);
+            log.trace("{} sendMore for {} rem={} closed={} streamComplete={} fileIn={}", this, sender, sendRemain,
+                      closed, streamComplete, fileIn);
         }
         try {
             if (maybeDropSend()) {
                 if (StreamService.LOG_DROP_MORE || log.isDebugEnabled()) {
-                    log.debug(this + " sendMore drop request sr=" + sendRemain + ", cl=" + closed + ", co=" + streamComplete + ", fi=" + fileIn);
+                    log.debug("{} sendMore drop request sr={}, cl={}, co={}, fi={}", this, sendRemain, closed,
+                              streamComplete, fileIn);
                 }
                 return -1;
             }
             byte[] next = fileIn.nextBytes(StreamService.READ_WAIT);
             if (next != null) {
                 if (log.isTraceEnabled()) {
-                    log.trace(this + " send add read=" + next.length);
+                    log.trace("{} send add read={}", this, next.length);
                 }
                 StreamService.readBytes.addAndGet(next.length);
                 ChannelBuffer buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
@@ -368,18 +370,18 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 sendRemain.addAndGet(-bytesSent);
                 sentBytes += bytesSent;
                 if (log.isTraceEnabled()) {
-                    log.trace(this + " read read=" + next.length + " sendRemain=" + sendRemain);
+                    log.trace("{} read read={} sendRemain={}", this, next.length, sendRemain);
                 }
                 return bytesSent;
             } else if (fileIn.isEOF()) {
                 if (log.isTraceEnabled()) {
-                    log.trace(this + " read close on null. sendRemain=" + sendRemain);
+                    log.trace("{} read close on null. sendRemain={}", this, sendRemain);
                 }
                 modeClose();
                 return -1;
             } else {
                 if (log.isDebugEnabled()) {
-                    log.debug(this + " read timeout. sendRemain=" + sendRemain);
+                    log.debug("{} read timeout. sendRemain={}", this, sendRemain);
                 }
                 return 0;
             }
@@ -392,7 +394,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     @Override
     public void sendFinished(int bytes) {
         if (log.isTraceEnabled()) {
-            log.trace(this + " send finished " + bytes);
+            log.trace("{} send finished {}", this, bytes);
         }
         StreamService.sendWaiting.addAndGet(-bytes);
     }
