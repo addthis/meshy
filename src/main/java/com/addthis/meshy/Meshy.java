@@ -178,7 +178,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
      * utility
      */
     public static byte[] getBytes(int length, ChannelBuffer buffer) {
-        byte request[] = new byte[length];
+        byte[] request = new byte[length];
         buffer.readBytes(request);
         return request;
     }

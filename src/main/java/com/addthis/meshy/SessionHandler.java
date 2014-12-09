@@ -18,7 +18,7 @@ import org.jboss.netty.buffer.ChannelBuffer;
 
 public interface SessionHandler {
 
-    boolean send(byte data[], SendWatcher watcher);
+    boolean send(byte[] data, SendWatcher watcher);
 
     boolean sendComplete();
 

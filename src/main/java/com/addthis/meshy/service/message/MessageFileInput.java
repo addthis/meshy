@@ -38,7 +38,7 @@ class MessageFileInput implements VirtualFileInput, TargetListener {
     private final AtomicBoolean isEOF = new AtomicBoolean(false);
     private final Semaphore gate = new Semaphore(1);
     private final String topicID = "rpc.reply." + MessageFileSystem.nextReplyID.incrementAndGet();
-    private byte data[];
+    private byte[] data;
 
     MessageFileInput(String name, Map<String, String> options, TopicSender target) {
         this.name = name;

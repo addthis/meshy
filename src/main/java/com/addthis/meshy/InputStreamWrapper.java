@@ -66,7 +66,7 @@ public class InputStreamWrapper implements VirtualFileInput {
             done = true;
         }
         if (got < b.length) {
-            byte ret[] = new byte[got];
+            byte[] ret = new byte[got];
             System.arraycopy(b, 0, ret, 0, got);
             b = ret;
             shortRead.incrementAndGet();

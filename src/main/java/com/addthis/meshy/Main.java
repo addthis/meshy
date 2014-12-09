@@ -42,7 +42,7 @@ import com.addthis.meshy.service.stream.StreamSource;
 
 public final class Main {
 
-    public static void main(String args[]) throws Exception {
+    public static void main(String[] args) throws Exception {
         if (args.length == 0) {
             System.out.println("usage: client <host> <port> [cmd] [arg] ... | server <port,port> [root_dir] [peer,peer]");
             return;
@@ -66,7 +66,7 @@ public final class Main {
                             Map<String, String> params = null;
                             params = new HashMap<>();
                             for (int i = 6; i < args.length; i++) {
-                                String kv[] = Strings.splitArray(args[i], "=");
+                                String[] kv = Strings.splitArray(args[i], "=");
                                 if (kv[0].equals("--buffer")) {
                                     buffer = Integer.parseInt(kv[1]);
                                 } else {
@@ -105,7 +105,7 @@ public final class Main {
                     /* usage: madcat <readers> <bufferSize> <filematch> */
                         int threads = Integer.parseInt(args[4]);
                         final int bufferSize = Integer.parseInt(args[5]);
-                        final String fileMatch[] = {args[6]};
+                        final String[] fileMatch = {args[6]};
                         final DecimalFormat number = new DecimalFormat("#,###");
                         final AtomicLong totalBytes = new AtomicLong(0);
                         final AtomicLong readBytes = new AtomicLong(0);
@@ -212,12 +212,12 @@ public final class Main {
              * server [port,port] [rootDir]
              * server [port,port] [rootDir] [peerTo,peerTo]
              */
-            String ports[] = Strings.splitArray(args[1], ",");
+            String[] ports = Strings.splitArray(args[1], ",");
             LinkedList<MeshyServer> meshNodes = new LinkedList<>();
             MeshyServerGroup group = new MeshyServerGroup();
             for (String port : ports) {
-                String netIf[] = null;
-                String portInfo[] = Strings.splitArray(port, ":");
+                String[] netIf = null;
+                String[] portInfo = Strings.splitArray(port, ":");
                 int portNum = Integer.parseInt(portInfo[0]);
                 if (portInfo.length > 1) {
                     netIf = new String[portInfo.length - 1];
@@ -236,7 +236,7 @@ public final class Main {
             if (args.length == 4) {
                 for (String peer : Strings.splitArray(args[3], ",")) {
                     for (MeshyServer meshNode : meshNodes) {
-                        String hostPort[] = Strings.splitArray(peer, ":");
+                        String[] hostPort = Strings.splitArray(peer, ":");
                         int port = hostPort.length > 1 ? Integer.parseInt(hostPort[1]) : meshNode.getLocalAddress().getPort();
                         meshNode.connectPeer(new InetSocketAddress(hostPort[0], port));
                     }

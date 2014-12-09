@@ -40,7 +40,7 @@ public class HostTarget extends TargetHandler {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int count = Bytes.readInt(in);
         while (count-- > 0) {
-            String peer[] = Strings.splitArray(Bytes.readString(in), ":");
+            String[] peer = Strings.splitArray(Bytes.readString(in), ":");
             String host = peer[0];
             int port = Integer.parseInt(peer[1]);
             getChannelMaster().connectToPeer(null, new InetSocketAddress(host, port));

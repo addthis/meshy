@@ -34,7 +34,7 @@ public class LocalFileSystem implements VirtualFileSystem {
 
     private static final Logger log = LoggerFactory.getLogger(LocalFileSystem.class);
 
-    private static LocalFileHandler handlers[];
+    private static LocalFileHandler[] handlers;
 
     static {
         reloadHandlers();
@@ -45,7 +45,7 @@ public class LocalFileSystem implements VirtualFileSystem {
         if (LocalFileHandlerMux.muxEnabled) {
             list.add(new LocalFileHandlerMux());
         }
-        String handlerClasses[] = Strings.splitArray(Parameter.value("mesh.local.handlers", ""), ",");
+        String[] handlerClasses = Strings.splitArray(Parameter.value("mesh.local.handlers", ""), ",");
         for (String handler : handlerClasses) {
             try {
                 list.add((LocalFileHandler) (Class.forName(handler).newInstance()));
@@ -149,7 +149,7 @@ public class LocalFileSystem implements VirtualFileSystem {
                     return list.iterator();
                 }
             }
-            File files[] = ptr.listFiles();
+            File[] files = ptr.listFiles();
             if (files == null) {
                 if (log.isDebugEnabled()) {
                     log.debug("no files for " + ptr);

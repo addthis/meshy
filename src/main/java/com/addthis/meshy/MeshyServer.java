@@ -89,7 +89,7 @@ public class MeshyServer extends Meshy {
                 }
                 Enumeration<InetAddress> enAddr = net.getInetAddresses();
                 while (enAddr.hasMoreElements()) {
-                    byte addr[] = enAddr.nextElement().getAddress();
+                    byte[] addr = enAddr.nextElement().getAddress();
                     /* only allow IPV4 at the moment */
                     if (addr.length == 4) {
                         vmLocalNet.add(addr);
@@ -138,7 +138,7 @@ public class MeshyServer extends Meshy {
 
     private final int serverPort;
     private final File rootDir;
-    private final VirtualFileSystem filesystems[];
+    private final VirtualFileSystem[] filesystems;
     private final ChannelFactory serverFactory;
     private final List<Channel> serverChannel;
     private final String serverUuid;
@@ -188,7 +188,7 @@ public class MeshyServer extends Meshy {
         this(port, rootDir, null, new MeshyServerGroup());
     }
 
-    public MeshyServer(final int port, final File rootDir, String netif[], final MeshyServerGroup group) throws IOException {
+    public MeshyServer(final int port, final File rootDir, String[] netif, final MeshyServerGroup group) throws IOException {
         super();
         this.group = group;
         this.serverPort = port;
@@ -459,8 +459,8 @@ public class MeshyServer extends Meshy {
         }
         /* check for local peering */
         if (!allowPeerLocal) {
-            byte peerAddr[] = pAddr.getAddress().getAddress();
-            for (byte addr[] : vmLocalNet) {
+            byte[] peerAddr = pAddr.getAddress().getAddress();
+            for (byte[] addr : vmLocalNet) {
                 if (Bytes.equals(peerAddr, addr)) {
                     log.info("peer reject local {}", pAddr);
                     return null;
@@ -576,7 +576,7 @@ public class MeshyServer extends Meshy {
 
             private DatagramPacket encode() throws IOException {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
-                MeshyServer members[] = group.getMembers();
+                MeshyServer[] members = group.getMembers();
                 ArrayList<MeshyServer> readyList = new ArrayList<>(members.length);
                 for (MeshyServer meshy : members) {
                     if (meshy.initialized) {
@@ -591,7 +591,7 @@ public class MeshyServer extends Meshy {
                 if (secret != null) {
                     Bytes.writeString(secret, out);
                 }
-                byte raw[] = out.toByteArray();
+                byte[] raw = out.toByteArray();
                 CRC32 crc = new CRC32();
                 crc.update(raw);
                 out = new ByteArrayOutputStream();
@@ -605,9 +605,9 @@ public class MeshyServer extends Meshy {
 
             private Iterable<NodeInfo> decode(DatagramPacket packet) throws IOException {
                 InetAddress remote = packet.getAddress();
-                byte packed[] = packet.getData();
+                byte[] packed = packet.getData();
                 ByteArrayInputStream in = new ByteArrayInputStream(packed);
-                byte raw[] = Bytes.readBytes(in);
+                byte[] raw = Bytes.readBytes(in);
                 long crcValue = Bytes.readLength(in);
                 CRC32 crc = new CRC32();
                 crc.update(raw);

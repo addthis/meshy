@@ -47,7 +47,7 @@ public class BufferAllocator {
     static final int BASE_SIZE = 64;
 
     private final ChannelBufferFactory bufferFactory;
-    private final SizedPool pools[];
+    private final SizedPool[] pools;
     private final AtomicLong bufferMem = new AtomicLong(0); // buffer mem in cache
     private final AtomicLong bufferOut = new AtomicLong(0); // buffer mem leased to apps
     private final AtomicInteger leases = new AtomicInteger(0); // buffer objects leased (timed/reset)
@@ -173,8 +173,8 @@ public class BufferAllocator {
         public final int leases;
         public final int returns;
         public final int sleeps;
-        public final Integer poolSizes[];
-        public final Integer poolLeases[];
+        public final Integer[] poolSizes;
+        public final Integer[] poolLeases;
 
         private Stats(BufferAllocator bufferAllocator) {
             this.bufferMem = bufferAllocator.bufferMem.get();

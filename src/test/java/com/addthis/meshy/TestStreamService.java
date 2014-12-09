@@ -133,7 +133,7 @@ public class TestStreamService extends TestMesh {
                 client = new MeshyClient("localhost", connectTo.getLocalAddress().getPort());
                 StreamSource stream = new StreamSource(client, readFrom.getUUID(), path, 0);
                 long time = System.nanoTime();
-                byte raw[];
+                byte[] raw;
                 if (async) {
                     SourceInputStream sourceInputStream = stream.getInputStream();
                     ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -198,7 +198,7 @@ public class TestStreamService extends TestMesh {
         /* simple direct test */
         StreamSource stream = new StreamSource(client, server1.getUUID(), "/a/abc.xml", 1024 * 10);
         SourceInputStream in = stream.getInputStream();
-        byte data[] = async ? readAsync(in) : Bytes.readFully(in);
+        byte[] data = async ? readAsync(in) : Bytes.readFully(in);
         assertEquals(data.length, 4);
         log.info("{} server1:/a/abc.xml [{}]", logPrefix, data.length);
         stream.waitComplete();
@@ -252,7 +252,7 @@ public class TestStreamService extends TestMesh {
         stream.waitComplete();
     }
 
-    private static long md5(final byte data[]) {
+    private static long md5(final byte[] data) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.digest(data);

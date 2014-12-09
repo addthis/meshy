@@ -77,7 +77,7 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
     }
 
     private void updatePath(TopicSender target, String fullPath, boolean add) {
-        String path[] = Strings.splitArray(fullPath, "/");
+        String[] path = Strings.splitArray(fullPath, "/");
         MessageFile ptr = root;
         for (int i = 0; i < path.length; i++) {
             String tok = path[i];
