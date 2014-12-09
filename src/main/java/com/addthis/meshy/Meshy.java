@@ -147,11 +147,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
         clientFactory = new NioClientSocketChannelFactory(Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
         clientBootstrap = new ClientBootstrap(clientFactory);
-        clientBootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                return Channels.pipeline(new MeshyChannelHandler());
-            }
-        });
+        clientBootstrap.setPipelineFactory(() -> Channels.pipeline(new MeshyChannelHandler()));
         clientBootstrap.setOption("tcpNoDelay", true);
         clientBootstrap.setOption("keepAlive", true);
         clientBootstrap.setOption("connectTimeoutMillis", 30000);

@@ -34,7 +34,6 @@ import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelException;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.group.ChannelGroupFuture;
-import org.jboss.netty.channel.group.ChannelGroupFutureListener;
 import org.jboss.netty.channel.group.DefaultChannelGroupFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -233,14 +232,11 @@ public abstract class SourceHandler implements SessionHandler {
                 futures.add(c.write(buffer.duplicate()));
             }
             ChannelGroupFuture future = new DefaultChannelGroupFuture(DummyChannelGroup.DUMMY, futures);
-            future.addListener(new ChannelGroupFutureListener() {
-                @Override
-                public void operationComplete(ChannelGroupFuture future) throws Exception {
-                    master.sentBytes(reportBytes * peerCount);
-                    ChannelState.returnSendBuffer(buffer);
-                    if (watcher != null) {
-                        watcher.sendFinished(reportBytes);
-                    }
+            future.addListener(ignored -> {
+                master.sentBytes(reportBytes * peerCount);
+                ChannelState.returnSendBuffer(buffer);
+                if (watcher != null) {
+                    watcher.sendFinished(reportBytes);
                 }
             });
             return true;

@@ -44,14 +44,11 @@ public class TestMessageFileSystem extends TestMesh {
          * client registers rpc endpoint in mesh filespace: /rpc.test/one.rpc
          */
         MessageFileProvider provider = new MessageFileProvider(client);
-        provider.setListener("/rpc.test/one.rpc", new MessageListener() {
-            @Override
-            public void requestContents(String fileName, Map<String, String> options, OutputStream out) throws IOException {
-                /* this is the client rpc reply endpoint implementation */
-                Bytes.writeString("rpc.reply", out);
-                /* bytes are accumulated and sent on close */
-                out.close();
-            }
+        provider.setListener("/rpc.test/one.rpc", (fileName, options, out) -> {
+            /* this is the client rpc reply endpoint implementation */
+            Bytes.writeString("rpc.reply", out);
+            /* bytes are accumulated and sent on close */
+            out.close();
         });
 
         /*

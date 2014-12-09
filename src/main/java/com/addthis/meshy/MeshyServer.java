@@ -200,11 +200,7 @@ public class MeshyServer extends Meshy {
         group.join(this);
         serverFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(), Executors.newCachedThreadPool());
         ServerBootstrap bootstrap = new ServerBootstrap(serverFactory);
-        bootstrap.setPipelineFactory(new ChannelPipelineFactory() {
-            public ChannelPipeline getPipeline() throws Exception {
-                return Channels.pipeline(new MeshyChannelHandler());
-            }
-        });
+        bootstrap.setPipelineFactory(() -> Channels.pipeline(new MeshyChannelHandler()));
         // for parent channel
         bootstrap.setOption("connectTimeoutMillis", 30000);
         bootstrap.setOption("reuseAddress", true);
@@ -254,66 +250,53 @@ public class MeshyServer extends Meshy {
     }
 
     private void addMessageFileSystemPaths() {
-        messageFileSystem.addPath("/meshy/" + getUUID() + "/stats", new InternalHandler() {
-            @Override
-            public byte[] handleMessageRequest(String fileName, Map<String, String> options) {
-                StringBuilder sb = new StringBuilder();
-                for (String line : group.getLastStats()) {
-                    sb.append(line);
-                    sb.append("\n");
-                }
-                return sb.toString().getBytes(UTF_8);
+        messageFileSystem.addPath("/meshy/" + getUUID() + "/stats", (fileName, options) -> {
+            StringBuilder sb = new StringBuilder();
+            for (String line : group.getLastStats()) {
+                sb.append(line);
+                sb.append("\n");
             }
+            return sb.toString().getBytes(UTF_8);
         });
-        messageFileSystem.addPath("/meshy/statsMap", new InternalHandler() {
-            @Override
-            public byte[] handleMessageRequest(String fileName, Map<String, String> options) {
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                Map<String, Integer> stats = group.getLastStatsMap();
+        messageFileSystem.addPath("/meshy/statsMap", (fileName, options) -> {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            Map<String, Integer> stats = group.getLastStatsMap();
+            try {
+                Bytes.writeInt(stats.size(), out);
+                for (Map.Entry<String, Integer> e : stats.entrySet()) {
+                    Bytes.writeString(e.getKey(), out);
+                    Bytes.writeInt(e.getValue(), out);
+                }
+            } catch (IOException e) {
+                //ByteArrayOutputStreams do not throw IOExceptions
+            }
+            return out.toByteArray();
+        });
+        messageFileSystem.addPath("/meshy/host/ban", (fileName, options) -> {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            String hostName = options.get("host");
+            synchronized (blockedPeers) {
                 try {
-                    Bytes.writeInt(stats.size(), out);
-                    for (Map.Entry<String, Integer> e : stats.entrySet()) {
-                        Bytes.writeString(e.getKey(), out);
-                        Bytes.writeInt(e.getValue(), out);
-                    }
-                } catch (IOException e) {
-                    //ByteArrayOutputStreams do not throw IOExceptions
-                }
-                return out.toByteArray();
-            }
-        });
-        messageFileSystem.addPath("/meshy/host/ban", new InternalHandler() {
-            /**
-             * If host option exists, then ban that host. Otherwise, list currently
-             * banned hosts.
-             */
-            @Override
-            public byte[] handleMessageRequest(String fileName, Map<String, String> options) {
-                ByteArrayOutputStream out = new ByteArrayOutputStream();
-                String hostName = options.get("host");
-                synchronized (blockedPeers) {
-                    try {
-                        if (hostName == null) {
-                            for (String peer : blockedPeers) {
-                                Bytes.writeString(peer + "\n", out);
-                            }
-                        } else {
-                            if (blockedPeers.contains(hostName)) {
-                                Bytes.writeString(hostName + " already in blocked peers\n", out);
-                            } else {
-                                Bytes.writeString(hostName + " added to blocked peers\n", out);
-                            }
-                            if (dropPeer(hostName)) {
-                                Bytes.writeString(hostName + " connection closed (async)\n", out);
-                            } else {
-                                Bytes.writeString(hostName + " connection not found\n", out);
-                            }
+                    if (hostName == null) {
+                        for (String peer : blockedPeers) {
+                            Bytes.writeString(peer + "\n", out);
                         }
-                    } catch (IOException ignored) {
+                    } else {
+                        if (blockedPeers.contains(hostName)) {
+                            Bytes.writeString(hostName + " already in blocked peers\n", out);
+                        } else {
+                            Bytes.writeString(hostName + " added to blocked peers\n", out);
+                        }
+                        if (dropPeer(hostName)) {
+                            Bytes.writeString(hostName + " connection closed (async)\n", out);
+                        } else {
+                            Bytes.writeString(hostName + " connection not found\n", out);
+                        }
                     }
+                } catch (IOException ignored) {
                 }
-                return out.toByteArray();
             }
+            return out.toByteArray();
         });
     }
 

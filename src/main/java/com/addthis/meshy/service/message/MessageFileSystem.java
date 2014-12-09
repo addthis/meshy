@@ -69,6 +69,10 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
         updatePath(sender, path, true);
     }
 
+    public void addPath(String path, InternalHandler sender) {
+        updatePath(sender, path, true);
+    }
+
     /**
      * for JVM internal implementations
      */

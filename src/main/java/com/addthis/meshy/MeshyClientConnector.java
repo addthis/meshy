@@ -73,11 +73,8 @@ public abstract class MeshyClientConnector extends Thread {
         while (!done.get()) {
             try {
                 MeshyClient client = new MeshyClient(host, port);
-                client.getClientChannelCloseFuture().addListener(new ChannelFutureListener() {
-                    @Override
-                    public void operationComplete(ChannelFuture future) throws Exception {
-                        linkDown(ref.getAndSet(null));
-                    }
+                client.getClientChannelCloseFuture().addListener(future -> {
+                    linkDown(ref.getAndSet(null));
                 });
                 ref.set(client);
                 linkUp(client);
