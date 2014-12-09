@@ -51,7 +51,7 @@ public class MeshyServerGroup {
     private int statsCountdown = 2;
 
     // TODO replace with scheduled thread pool
-    MeshyServerGroup() {
+    public MeshyServerGroup() {
         statsThread = new Thread() {
             public void run() {
                 setName("MeshyStats");
@@ -173,7 +173,7 @@ public class MeshyServerGroup {
             int channelCount = 0;
             int peerCount = 0;
             for (MeshyServer server : byServer) {
-                MeshyServer.Stats stats = server.getStats();
+                ServerStats stats = server.getStats();
                 bin += stats.bin;
                 bout += stats.bout;
                 channelCount += stats.channelCount;
@@ -186,7 +186,7 @@ public class MeshyServerGroup {
         } else {
             int index = 0;
             for (MeshyServer server : byServer) {
-                MeshyServer.Stats stats = server.getStats();
+                ServerStats stats = server.getStats();
                 bin += stats.bin;
                 bout += stats.bout;
                 String pre = byServer.size() > 1 ? (" " + index) : " ";
