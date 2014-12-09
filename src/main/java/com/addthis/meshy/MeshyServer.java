@@ -41,12 +41,13 @@ import java.util.zip.CRC32;
 
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
-import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.service.message.InternalHandler;
 import com.addthis.meshy.service.message.MessageFileSystem;
 import com.addthis.meshy.service.peer.PeerService;
 import com.addthis.meshy.service.peer.PeerSource;
+
+import com.google.common.base.Splitter;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
@@ -61,6 +62,8 @@ import org.jboss.netty.channel.Channels;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 
 public class MeshyServer extends Meshy {
@@ -122,9 +125,9 @@ public class MeshyServer extends Meshy {
             }
             String registerVMs = Parameter.value("meshy.vms");
             if (registerVMs != null) {
-                for (String vm : Strings.splitArray(registerVMs, ",")) {
+                for (String vm : Splitter.on(",").omitEmptyStrings().trimResults().split(registerVMs)) {
                     try {
-                        load.add((VirtualFileSystem) (Class.forName(vm).newInstance()));
+                        load.add((VirtualFileSystem) Class.forName(vm).newInstance());
                     } catch (Throwable t) {
                         log.error("failure loading VM {}", vm, t);
                     }
@@ -259,7 +262,7 @@ public class MeshyServer extends Meshy {
                     sb.append(line);
                     sb.append("\n");
                 }
-                return Bytes.toBytes(sb.toString());
+                return sb.toString().getBytes(UTF_8);
             }
         });
         messageFileSystem.addPath("/meshy/statsMap", new InternalHandler() {
