@@ -39,9 +39,10 @@ import com.google.common.base.Objects;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 public class StreamTarget extends TargetHandler implements Runnable, SendWatcher {
 
@@ -147,7 +148,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         byte[] data = Meshy.getBytes(length, buffer);
         if (remoteSource != null) {
             log.trace("{} recv proxy to {}", this, remoteSource);
@@ -363,7 +364,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                     log.trace("{} send add read={}", this, next.length);
                 }
                 StreamService.readBytes.addAndGet(next.length);
-                ChannelBuffer buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
+                ByteBuf buf = getSendBuffer(next.length + StreamService.STREAM_BYTE_OVERHEAD);
                 buf.writeByte(StreamService.MODE_MORE);
                 buf.writeBytes(next);
                 int bytesSent = send(buf, sender);
@@ -406,7 +407,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
         }
 
         @Override
-        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+        public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
             if (StreamService.DIRECT_COPY) {
                 StreamTarget.this.send(buffer, length);
             } else {

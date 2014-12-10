@@ -28,11 +28,11 @@ import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.SourceHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.google.common.base.Preconditions.checkState;
+import io.netty.buffer.ByteBuf;
 
 public class FileSource extends SourceHandler {
 
@@ -111,7 +111,7 @@ public class FileSource extends SourceHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
         /* sync not required b/c overridden in server-server calls */
         FileReference ref = new FileReference(Meshy.getBytes(length, buffer));
         if (filter == null || filter.accept(ref)) {

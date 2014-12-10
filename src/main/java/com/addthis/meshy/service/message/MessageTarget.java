@@ -24,9 +24,10 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.TargetHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 /**
  * MessageService allows transient client connections to offer services and extensions
@@ -65,7 +66,7 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         InputStream in = Meshy.getInput(length, buffer);
         String topic = Bytes.readString(in);
         synchronized (targetListeners) {

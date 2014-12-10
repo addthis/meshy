@@ -37,9 +37,10 @@ import com.addthis.meshy.SourceHandler;
 import com.google.common.base.Objects;
 import com.google.common.base.Throwables;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
 
 public class StreamSource extends SourceHandler {
 
@@ -147,7 +148,7 @@ public class StreamSource extends SourceHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
         assert messageQueue != null : "must override receive for proxy mode";
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int mode = in.read();

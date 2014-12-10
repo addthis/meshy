@@ -29,10 +29,10 @@ import com.addthis.basis.util.Bytes;
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
-import com.addthis.meshy.service.peer.PeerService;
 import com.addthis.meshy.SourceHandler;
+import com.addthis.meshy.service.peer.PeerService;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
 
 public class HostSource extends SourceHandler {
 
@@ -75,7 +75,7 @@ public class HostSource extends SourceHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int hosts = Bytes.readInt(in);
         while (hosts-- > 0) {

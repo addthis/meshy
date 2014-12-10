@@ -85,14 +85,14 @@ public final class PeerService {
             Bytes.writeString(master.getUUID(), out);
             encodeAddress(master.getLocalAddress(), out);
             if (log.isDebugEnabled()) {
-                log.debug("{} encode peer remote={}", master, me != null ? me.getChannel().getRemoteAddress() : "");
+                log.debug("{} encode peer remote={}", master, me != null ? me.getChannel().remoteAddress() : "");
             }
             for (ChannelState channelState : master.getChannels(MeshyConstants.LINK_NAMED)) {
                 Bytes.writeString(channelState.getName(), out);
                 encodeAddress(channelState.getRemoteAddress(), out);
                 if (log.isDebugEnabled()) {
                     log.debug("{} encoded {} @ {}", master, channelState.getName(),
-                              channelState.getChannel().getRemoteAddress());
+                              channelState.getChannel().remoteAddress());
                 }
             }
             for (MeshyServer member : master.getMembers()) {
@@ -125,7 +125,7 @@ public final class PeerService {
             }
             me.setRemoteAddress(sockAddr);
             if (log.isDebugEnabled()) {
-                log.debug("{} decode peer {}:{}:{}", master, me.getChannel().getRemoteAddress(), me.getName(),
+                log.debug("{} decode peer {}:{}:{}", master, me.getChannel().remoteAddress(), me.getName(),
                           me.getRemoteAddress());
             }
             while (true) {

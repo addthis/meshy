@@ -18,8 +18,9 @@ import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.SourceHandler;
 
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.slf4j.Logger;
+
+import io.netty.buffer.ByteBuf;
 
 public class PeerSource extends SourceHandler {
 
@@ -39,7 +40,7 @@ public class PeerSource extends SourceHandler {
     }
 
     @Override
-    public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+    public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
         if (log.isDebugEnabled()) {
             log.debug("{} decode from {}", this, getPeerString());
         }

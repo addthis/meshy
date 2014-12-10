@@ -26,17 +26,17 @@ import com.addthis.basis.util.Strings;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
-import com.addthis.meshy.service.peer.PeerService;
 import com.addthis.meshy.TargetHandler;
+import com.addthis.meshy.service.peer.PeerService;
 
-import org.jboss.netty.buffer.ChannelBuffer;
+import io.netty.buffer.ByteBuf;
 
 public class HostTarget extends TargetHandler {
 
     boolean canceled = false;
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
         int count = Bytes.readInt(in);
         while (count-- > 0) {
@@ -63,7 +63,7 @@ public class HostTarget extends TargetHandler {
         for (ChannelState linkState : links) {
             InetSocketAddress remote = linkState.getRemoteAddress();
             if (remote == null) {
-                remote = (InetSocketAddress) linkState.getChannel().getRemoteAddress();
+                remote = (InetSocketAddress) linkState.getChannel().remoteAddress();
                 log.debug("missing remote for {} @ {}", remote, linkState);
             }
             Bytes.writeString(linkState.getName() != null ? linkState.getName() : "<null>", out);

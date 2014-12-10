@@ -13,8 +13,7 @@
  */
 package com.addthis.meshy;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-
+import io.netty.buffer.ByteBuf;
 
 public interface SessionHandler {
 
@@ -22,7 +21,7 @@ public interface SessionHandler {
 
     boolean sendComplete();
 
-    void receive(ChannelState state, int session, int length, ChannelBuffer buffer) throws Exception;
+    void receive(ChannelState state, int session, int length, ByteBuf buffer) throws Exception;
 
     void receiveComplete(ChannelState state, int session) throws Exception;
 

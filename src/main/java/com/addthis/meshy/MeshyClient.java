@@ -27,10 +27,11 @@ import com.addthis.meshy.service.file.FileSource;
 import com.addthis.meshy.service.stream.SourceInputStream;
 import com.addthis.meshy.service.stream.StreamSource;
 
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 
 
 public class MeshyClient extends Meshy {
@@ -61,7 +62,7 @@ public class MeshyClient extends Meshy {
             close();
             throw new IOException("connection fail to " + address);
         }
-        clientChannelCloseFuture = clientConnect.getChannel().getCloseFuture();
+        clientChannelCloseFuture = clientConnect.channel().closeFuture();
         /* re-acquire after connection comes up, which releases the lock */
         try {
             clientInitGate.acquire();
@@ -112,7 +113,7 @@ public class MeshyClient extends Meshy {
         if (closed.compareAndSet(false, true)) {
             super.close();
             if (clientChannelCloseFuture != null) {
-                clientChannelCloseFuture.getChannel().close().awaitUninterruptibly();
+                clientChannelCloseFuture.channel().close().awaitUninterruptibly();
             }
         }
     }

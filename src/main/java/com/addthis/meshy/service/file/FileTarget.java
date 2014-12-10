@@ -57,11 +57,12 @@ import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.Timer;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelException;
 
 public class FileTarget extends TargetHandler implements Runnable {
 
@@ -127,7 +128,7 @@ public class FileTarget extends TargetHandler implements Runnable {
     }
 
     @Override
-    public void receive(int length, ChannelBuffer buffer) throws Exception {
+    public void receive(int length, ByteBuf buffer) throws Exception {
         final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
         log.trace("{} recv scope={} msg={}", this, scope, msg);
         if (scope == null) {
@@ -404,7 +405,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                 if (sb.length() > 0) {
                     sb.append(',');
                 }
-                sb.append(((InetSocketAddress) peer.getRemoteAddress()).getHostName());
+                sb.append(((InetSocketAddress) peer.remoteAddress()).getHostName());
             }
             return sb.toString();
         } catch (Exception e) {
@@ -487,7 +488,7 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
 
         @Override
-        public void receive(ChannelState state, int length, ChannelBuffer buffer) throws Exception {
+        public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
             FileTarget.this.send(Meshy.getBytes(length, buffer));
         }
 

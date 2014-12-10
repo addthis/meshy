@@ -30,11 +30,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
@@ -47,15 +43,19 @@ import com.google.common.base.Splitter;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
 
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFactory;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 
@@ -136,37 +136,9 @@ public class MeshyServer extends Meshy {
     private final int serverPort;
     private final File rootDir;
     private final VirtualFileSystem[] filesystems;
-    private final ChannelFactory serverFactory;
-    private final List<Channel> serverChannel;
+    private final EventLoopGroup bossGroup;
     private final String serverUuid;
     private final MeshyServerGroup group;
-
-    /**
-     * This guard is used to ensure the close() method
-     * is invoked exactly once.
-     */
-    private final AtomicBoolean closeGuard = new AtomicBoolean(false);
-
-    /**
-     * Two types of threads can call the close() method.
-     * One type is an application thread which is a user level thread.
-     * The other type is the shutdown thread which is a JVM thread.
-     * <p/>
-     * If the user level thread begins the close() method and the
-     * JVM begins to terminate then it is possible for the JVM to terminate
-     * before the user level thread has completed the close() method.
-     * <p/>
-     * This semaphore is used to block the shutdown thread. The goal is to
-     * suspend the shutdown thread (and JVM termination) until the user level
-     * thread has completed and increments the semaphore.
-     * <p/>
-     * Alternatively the user level thread may block while the shutdown thread completes
-     * the close() method. This code path is benign as the shutdown thread
-     * will not be prematurely terminated.
-     * <p/>
-     * Both 'closeSemaphore' and 'closeGuard' are needed to work in concert.
-     */
-    private final Semaphore closeSemaphore = new Semaphore(1);
 
     private final Thread shutdownThread;
 
@@ -188,22 +160,27 @@ public class MeshyServer extends Meshy {
         this.serverPort = port;
         this.rootDir = rootDir;
         this.filesystems = loadFileSystems(rootDir);
-        serverFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(),
-                                                          Executors.newCachedThreadPool());
-        ServerBootstrap bootstrap = new ServerBootstrap(serverFactory);
-        bootstrap.setPipelineFactory(() -> Channels.pipeline(new MeshyChannelHandler(this)));
-        // for parent channel
-        bootstrap.setOption("connectTimeoutMillis", 30000);
-        bootstrap.setOption("reuseAddress", true);
-        bootstrap.setOption("backlog", 1024);
-        // for children channels
-        bootstrap.setOption("child.tcpNoDelay", true);
-        bootstrap.setOption("child.keepAlive", true);
-        serverChannel = new LinkedList<>();
+        bossGroup = new NioEventLoopGroup(1);
+        ServerBootstrap bootstrap = new ServerBootstrap()
+                .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                .option(ChannelOption.SO_BACKLOG, 1024)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
+                .option(ChannelOption.SO_REUSEADDR, true)
+                .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                .childOption(ChannelOption.TCP_NODELAY, true)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .channel(NioServerSocketChannel.class)
+                .group(bossGroup, workerGroup)
+                .childHandler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(final SocketChannel ch) throws Exception {
+                        ch.pipeline().addLast(new ChannelState(MeshyServer.this, ch));
+                    }
+                });
         /* bind to one or more interfaces, if supplied, otherwise all */
-        if (netif == null || netif.length == 0) {
+        if ((netif == null) || (netif.length == 0)) {
             serverLocal = new InetSocketAddress(port);
-            serverChannel.add(bootstrap.bind(serverLocal));
+            bootstrap.bind(serverLocal).syncUninterruptibly().channel();
         } else {
             for (String net : netif) {
                 NetworkInterface nicif = NetworkInterface.getByName(net);
@@ -218,12 +195,16 @@ public class MeshyServer extends Meshy {
                         continue;
                     }
                     serverLocal = new InetSocketAddress(inAddr, port);
-                    serverChannel.add(bootstrap.bind(serverLocal));
+                    bootstrap.bind(serverLocal).syncUninterruptibly().channel();
                 }
                 serverNetIf = net;
             }
         }
-        serverUuid = super.getUUID() + "-" + port + (serverNetIf != null ? "-" + serverNetIf : "");
+        if (serverNetIf != null) {
+            serverUuid = super.getUUID() + "-" + port + "-" + serverNetIf;
+        } else {
+            serverUuid = super.getUUID() + "-" + port;
+        }
         log.info("server [{}] on {} @ {}", getUUID(), port, rootDir);
         shutdownThread = new Thread() {
             public void run() {
@@ -315,7 +296,7 @@ public class MeshyServer extends Meshy {
         /* servers peer with other servers once a channel comes up */
         // assign unique id (local or remote inferred)
         channelState.setName("temp-uuid-" + nextSession.incrementAndGet());
-        InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
+        InetSocketAddress address = (InetSocketAddress) channel.remoteAddress();
         if (needsPeering.remove(address)) {
             log.debug("{} >>> starting peering with {}", MeshyServer.this, address);
             new PeerSource(this, channelState.getName());
@@ -324,27 +305,14 @@ public class MeshyServer extends Meshy {
 
     @Override
     public void close() {
-        closeSemaphore.acquireUninterruptibly();
+        log.debug("{} exiting", this);
+        bossGroup.shutdownGracefully();
+        super.close();
+        bossGroup.terminationFuture().syncUninterruptibly();
         try {
-            if (!closeGuard.getAndSet(true)) {
-                log.debug("{} exiting", this);
-                super.close();
-                if (serverFactory != null) {
-                    serverFactory.releaseExternalResources();
-                }
-                if (serverChannel != null) {
-                    for (Channel ch : serverChannel) {
-                        ch.close().awaitUninterruptibly();
-                    }
-                }
-                try {
-                    Runtime.getRuntime().removeShutdownHook(shutdownThread);
-                } catch (IllegalStateException ex) {
-                    // the JVM is shutting down
-                }
-            }
-        } finally {
-            closeSemaphore.release();
+            Runtime.getRuntime().removeShutdownHook(shutdownThread);
+        } catch (IllegalStateException ex) {
+            // the JVM is shutting down
         }
     }
 

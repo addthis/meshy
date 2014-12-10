@@ -13,6 +13,8 @@
  */
 package com.addthis.meshy;
 
+import javax.annotation.Nullable;
+
 import java.net.InetSocketAddress;
 
 import java.util.Map;
@@ -23,25 +25,21 @@ import com.addthis.basis.util.Parameter;
 
 import com.google.common.base.Objects;
 
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelStateEvent;
-import org.jboss.netty.channel.MessageEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
 
-/**
- * TODO implement pinger to teardown "dead" peers
- */
-public class ChannelState {
+
+public class ChannelState extends ChannelDuplexHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ChannelState.class);
     private static final int excessiveTargets = Parameter.intValue("meshy.channel.report.targets", 2000);
     private static final int excessiveSources = Parameter.intValue("meshy.channel.report.sources", 2000);
-
-    protected static final BufferAllocator bufferFactory = new BufferAllocator();
 
     public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
 
@@ -49,43 +47,12 @@ public class ChannelState {
         ReadType, ReadSession, ReadLength, ReadData
     }
 
-    public static ChannelBuffer allocateSendBuffer(int type, int session, byte[] data) {
-        return allocateSendBuffer(type, session, data, 0, data.length);
-    }
-
-    public static ChannelBuffer allocateSendBuffer(int type, int session, byte[] data, int off, int len) {
-        ChannelBuffer sendBuffer = allocateSendBuffer(type, session, len);
-        sendBuffer.writeBytes(data, off, len);
-        return sendBuffer;
-    }
-
-    public static ChannelBuffer allocateSendBuffer(int type, int session, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
-        sendBuffer.writeInt(type);
-        sendBuffer.writeInt(session);
-        sendBuffer.writeInt(length);
-        return sendBuffer;
-    }
-
-    public static ChannelBuffer allocateSendBuffer(int type, int session, ChannelBuffer from, int length) {
-        ChannelBuffer sendBuffer = bufferFactory.allocateBuffer(MESHY_BYTE_OVERHEAD + length);
-        sendBuffer.writeInt(type);
-        sendBuffer.writeInt(session);
-        sendBuffer.writeInt(length);
-        from.readBytes(sendBuffer, length);
-        return sendBuffer;
-    }
-
-    public static void returnSendBuffer(ChannelBuffer buffer) {
-        bufferFactory.returnBuffer(buffer);
-    }
-
     private final ConcurrentMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMap<>();
     private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMap<>();
-    private final ChannelMaster master;
+    private final ByteBuf buffer;
+    private final Meshy meshy;
     private final Channel channel;
 
-    private ChannelBuffer buffer = bufferFactory.allocateBuffer(16384);
     private READMODE mode = READMODE.ReadType;
     // last session id for which a handler was created on this channel. should always be > than the last
     private int type;
@@ -95,9 +62,39 @@ public class ChannelState {
     //    private int remotePort;
     private InetSocketAddress remoteAddress;
 
-    ChannelState(ChannelMaster master, Channel channel) {
-        this.master = master;
+    ChannelState(Meshy meshy, Channel channel) {
+        this.meshy = meshy;
         this.channel = channel;
+        this.buffer = channel.alloc().buffer(16384);
+    }
+
+    @Override public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        if (msg instanceof ByteBuf) {
+            meshy.updateLastEventTime();
+            messageReceived((ByteBuf) msg);
+        } else {
+            super.channelRead(ctx, msg);
+        }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        meshy.updateLastEventTime();
+        log.warn("Netty exception caught. Closing channel. ChannelState: {}", this, cause);
+        ctx.channel().close();
+    }
+
+    @Override public void channelActive(ChannelHandlerContext ctx) {
+        meshy.updateLastEventTime();
+        channelConnected();
+        meshy.channelConnected(ctx.channel(), this);
+    }
+
+    @Override public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        meshy.updateLastEventTime();
+        channelClosed();
+        meshy.channelClosed(ctx.channel());
+        buffer.release();
     }
 
     protected Objects.ToStringHelper toStringHelper() {
@@ -111,7 +108,7 @@ public class ChannelState {
                 .add("session", session)
                 .add("length", length)
                 .add("channel", channel)
-                .add("master", master.getUUID());
+                .add("master", meshy.getUUID());
     }
 
     @Override
@@ -129,12 +126,11 @@ public class ChannelState {
         }
     }
 
-    public boolean send(final ChannelBuffer sendBuffer, final SendWatcher watcher, final int reportBytes) {
+    public boolean send(final ByteBuf sendBuffer, final SendWatcher watcher, final int reportBytes) {
         if (channel.isOpen()) {
-            ChannelFuture future = channel.write(sendBuffer);
+            ChannelFuture future = channel.writeAndFlush(sendBuffer);
             future.addListener(ignored -> {
-                master.sentBytes(reportBytes);
-                returnSendBuffer(sendBuffer);
+                meshy.sentBytes(reportBytes);
                 if (watcher != null) {
                     watcher.sendFinished(reportBytes);
                 }
@@ -157,6 +153,7 @@ public class ChannelState {
                      */
                     watcher.sendFinished(reportBytes);
                 }
+                sendBuffer.release();
             }
             return false;
         }
@@ -183,12 +180,16 @@ public class ChannelState {
         return channel;
     }
 
-    public InetSocketAddress getChannelRemoteAddress() {
-        return channel != null ? (InetSocketAddress) channel.getRemoteAddress() : null;
+    @Nullable public InetSocketAddress getChannelRemoteAddress() {
+        if (channel != null) {
+            return (InetSocketAddress) channel.remoteAddress();
+        } else {
+            return null;
+        }
     }
 
     public ChannelMaster getChannelMaster() {
-        return master;
+        return meshy;
     }
 
     public void addSourceHandler(int sessionID, SourceHandler handler) {
@@ -208,12 +209,12 @@ public class ChannelState {
         }
     }
 
-    public void channelConnected(ChannelStateEvent e) {
-        log.debug("{} channel:connect [{}] {}", this, this.hashCode(), e);
+    public void channelConnected() {
+        log.debug("{} channel:connect [{}]", this, this.hashCode());
     }
 
-    public void channelClosed(ChannelStateEvent e) throws Exception {
-        log.debug("{} channel:close [{}] {}", this, this.hashCode(), e);
+    public void channelClosed() throws Exception {
+        log.debug("{} channel:close [{}]", this, this.hashCode());
         for (Map.Entry<Integer, SessionHandler> entry : targetHandlers.entrySet()) {
             entry.getValue().receiveComplete(this, entry.getKey());
         }
@@ -222,20 +223,11 @@ public class ChannelState {
         }
     }
 
-    public void messageReceived(MessageEvent msg) {
-        log.trace("{} recv msg={}", this, msg);
-        final ChannelBuffer in = (ChannelBuffer) msg.getMessage();
-        master.recvBytes(in.readableBytes());
-        if (buffer.writableBytes() >= in.readableBytes()) {
-            buffer.writeBytes(in);
-        } else {
-            ChannelBuffer out = bufferFactory.allocateBuffer(in.readableBytes() + buffer.readableBytes());
-            out.writeBytes(buffer);
-            out.writeBytes(in);
-            returnSendBuffer(buffer);
-            buffer = out;
-            log.debug("{} recv.reallocate: {}", this, out.writableBytes());
-        }
+    public void messageReceived(ByteBuf in) {
+        log.trace("{} recv msg={}", this, in);
+        meshy.recvBytes(in.readableBytes());
+        buffer.writeBytes(in);
+        in.release();
         loop:
         while (true) {
             switch (mode) {
@@ -272,10 +264,10 @@ public class ChannelState {
                         handler = sourceHandlers.get(session);
                     } else {
                         handler = targetHandlers.get(session);
-                        if ((handler == null) && (master instanceof MeshyServer)) {
+                        if ((handler == null) && (meshy instanceof MeshyServer)) {
                             if (type != MeshyConstants.KEY_EXISTING) {
-                                handler = master.createHandler(type);
-                                ((TargetHandler) handler).setContext((MeshyServer) master, this, session);
+                                handler = meshy.createHandler(type);
+                                ((TargetHandler) handler).setContext((MeshyServer) meshy, this, session);
                                 log.debug("{} createHandler {} session={}", this, handler, session);
                                 if (targetHandlers.put(session, handler) != null) {
                                     log.debug("clobbered session {} with {}", session, handler);
@@ -333,5 +325,32 @@ public class ChannelState {
         } else {
             targetHandlers.remove(sessionId);
         }
+    }
+
+    public ByteBuf allocateSendBuffer(int type, int session, byte[] data) {
+        return allocateSendBuffer(type, session, data, 0, data.length);
+    }
+
+    public ByteBuf allocateSendBuffer(int type, int session, byte[] data, int off, int len) {
+        ByteBuf sendBuffer = allocateSendBuffer(type, session, len);
+        sendBuffer.writeBytes(data, off, len);
+        return sendBuffer;
+    }
+
+    public ByteBuf allocateSendBuffer(int type, int session, int length) {
+        ByteBuf sendBuffer = channel.alloc().buffer(MESHY_BYTE_OVERHEAD + length);
+        sendBuffer.writeInt(type);
+        sendBuffer.writeInt(session);
+        sendBuffer.writeInt(length);
+        return sendBuffer;
+    }
+
+    public ByteBuf allocateSendBuffer(int type, int session, ByteBuf from, int length) {
+        ByteBuf sendBuffer = channel.alloc().buffer(MESHY_BYTE_OVERHEAD + length);
+        sendBuffer.writeInt(type);
+        sendBuffer.writeInt(session);
+        sendBuffer.writeInt(length);
+        sendBuffer.writeBytes(from, length);
+        return sendBuffer;
     }
 }

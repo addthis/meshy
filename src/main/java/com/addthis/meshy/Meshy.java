@@ -31,7 +31,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,17 +57,23 @@ import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.VirtualMachineMetrics;
 
-import org.jboss.netty.bootstrap.ClientBootstrap;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFactory;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.group.ChannelGroup;
-import org.jboss.netty.channel.group.DefaultChannelGroup;
-import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.group.ChannelGroup;
+import io.netty.channel.group.DefaultChannelGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.ImmediateEventExecutor;
 
 /**
  * full mesh nodes are both clients and servers. so the client logic is not exclusive to client-only nodes.
@@ -116,19 +121,21 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
     }
 
+    private final ChannelGroup allChannels = new DefaultChannelGroup(ImmediateEventExecutor.INSTANCE);
+    private final Collection<ChannelCloseListener> channelCloseListeners = new ArrayList<>();
     protected final Set<ChannelState> connectedChannels = new HashSet<>();
     protected final Set<InetSocketAddress> needsPeering = new HashSet<>();
     /* nodes actively being peered */
     protected final Set<String> inPeering = new HashSet<>();
 
-    private final ChannelFactory clientFactory;
-    private final ClientBootstrap clientBootstrap;
+    protected final EventLoopGroup workerGroup;
+
+    private final Bootstrap clientBootstrap;
     private final String uuid;
+
     private final AtomicLong lastEvent = new AtomicLong(0);
-    private final ChannelGroup allChannels = new DefaultChannelGroup();
     private final AtomicInteger bytesIn = new AtomicInteger(0);
     private final AtomicInteger bytesOut = new AtomicInteger(0);
-    private final Collection<ChannelCloseListener> channelCloseListeners = new ArrayList<>();
 
     protected Meshy() {
         if (HOSTNAME != null) {
@@ -136,13 +143,20 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         } else {
             uuid = Long.toHexString(UUID.randomUUID().getMostSignificantBits());
         }
-        clientFactory = new NioClientSocketChannelFactory(Executors.newCachedThreadPool(),
-                                                          Executors.newCachedThreadPool());
-        clientBootstrap = new ClientBootstrap(clientFactory);
-        clientBootstrap.setPipelineFactory(() -> Channels.pipeline(new MeshyChannelHandler(this)));
-        clientBootstrap.setOption("tcpNoDelay", true);
-        clientBootstrap.setOption("keepAlive", true);
-        clientBootstrap.setOption("connectTimeoutMillis", 30000);
+        workerGroup = new NioEventLoopGroup();
+        clientBootstrap = new Bootstrap()
+                .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
+                .option(ChannelOption.TCP_NODELAY, true)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
+                .channel(NioSocketChannel.class)
+                .group(workerGroup)
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(final SocketChannel ch) throws Exception {
+                        ch.pipeline().addLast(new ChannelState(Meshy.this, ch));
+                    }
+                });
         updateLastEventTime();
     }
 
@@ -158,14 +172,14 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         }
     }
 
-    public static InputStream getInput(int length, ChannelBuffer buffer) {
+    public static InputStream getInput(int length, ByteBuf buffer) {
         return new ByteArrayInputStream(getBytes(length, buffer));
     }
 
     /**
      * utility
      */
-    public static byte[] getBytes(int length, ChannelBuffer buffer) {
+    public static byte[] getBytes(int length, ByteBuf buffer) {
         byte[] request = new byte[length];
         buffer.readBytes(request);
         return request;
@@ -191,8 +205,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 state.debugSessions();
             }
         }
-        allChannels.close().awaitUninterruptibly();
-        clientFactory.releaseExternalResources();
+        workerGroup.shutdownGracefully().syncUninterruptibly();
     }
 
     protected ChannelFuture connect(InetSocketAddress addr) {
@@ -282,32 +295,30 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         synchronized (connectedChannels) {
             connectedChannels.add(channelState);
         }
-        log.debug("{} channelConnected @ {}", this, channel.getRemoteAddress());
+        log.debug("{} channelConnected @ {}", this, channel.remoteAddress());
     }
 
     protected void channelClosed(Channel channel) {
         allChannels.remove(channel);
-        if (channel.getId() != null) {
-            synchronized (connectedChannels) {
-                ChannelState match = null;
-                for (ChannelState state : connectedChannels) {
-                    if (state.getChannel() == channel) {
-                        match = state;
-                        break;
-                    }
-                }
-                if (match != null) {
-                    connectedChannels.remove(match);
-                    inPeering.remove(match.getName());
+        synchronized (connectedChannels) {
+            ChannelState match = null;
+            for (ChannelState state : connectedChannels) {
+                if (state.getChannel() == channel) {
+                    match = state;
+                    break;
                 }
             }
-            synchronized (channelCloseListeners) {
-                for (ChannelCloseListener channelCloseListener : channelCloseListeners) {
-                    channelCloseListener.channelClosed(channel.getId());
-                }
+            if (match != null) {
+                connectedChannels.remove(match);
+                inPeering.remove(match.getName());
             }
         }
-        log.debug("{} channelClosed @ {}", this, channel.getRemoteAddress());
+        synchronized (channelCloseListeners) {
+            for (ChannelCloseListener channelCloseListener : channelCloseListeners) {
+                channelCloseListener.channelClosed(channel);
+            }
+        }
+        log.debug("{} channelClosed @ {}", this, channel.remoteAddress());
     }
 
     public boolean addChannelCloseListener(ChannelCloseListener channelCloseListener) {
