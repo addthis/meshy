@@ -29,7 +29,7 @@ class AggregateChannelFuture extends DefaultPromise<Void> {
     private final AtomicInteger complete;
     private final ChannelFutureListener aggregatingListener;
 
-    // the group failure will just report any one sub-cause rather than bothering with a new exception
+    // the group failure will just report any one sub-cause rather than bothering with suppressing (would need CAS)
     private volatile Throwable anyCause = null;
 
     /** the promises collection should not be mutated after construction */
