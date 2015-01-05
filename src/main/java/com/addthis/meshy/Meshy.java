@@ -71,7 +71,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 
@@ -86,6 +85,9 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     // system property constants
     static final boolean THROTTLE_LOG = Parameter.boolValue("meshy.throttleLog", true);
     static final int STATS_INTERVAL = Parameter.intValue("meshy.stats.time", 1) * 1000;
+    // default channel watermarks to 10 MB and 5 MB
+    static final int HIGH_WATERMARK = Parameter.intValue("meshy.channel.highWatermark", 10 * 1024) * 1024;
+    static final int LOW_WATERMARK = Parameter.intValue("meshy.channel.lowWatermark", 5 * 1024) * 1024;
 
     static final Map<Integer, Class<? extends SessionHandler>> idHandlerMap = new HashMap<>();
     static final Map<Class<? extends SessionHandler>, Integer> handlerIdMap = new HashMap<>();
@@ -149,11 +151,13 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 .option(ChannelOption.TCP_NODELAY, true)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 30000)
+                .option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, HIGH_WATERMARK)
+                .option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, LOW_WATERMARK)
                 .channel(NioSocketChannel.class)
                 .group(workerGroup)
-                .handler(new ChannelInitializer<SocketChannel>() {
+                .handler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
-                    protected void initChannel(final SocketChannel ch) throws Exception {
+                    protected void initChannel(final NioSocketChannel ch) throws Exception {
                         ch.pipeline().addLast(new ChannelState(Meshy.this, ch));
                     }
                 });

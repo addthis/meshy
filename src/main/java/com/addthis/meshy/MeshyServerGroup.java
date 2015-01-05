@@ -116,6 +116,8 @@ public class MeshyServerGroup {
         rep.append(Meshy.numbers.format(ss.sendWaiting));  // send buffers bytes waiting to return
         rep.append(" sZ=");
         rep.append(ss.sleeps); // sleeps b/c over sendWait limit
+        rep.append(" cZ=");
+        rep.append(ChannelState.writeSleeps.getAndSet(0)); // sleeps b/c over channel watermark
         rep.append(" fCH=");
         rep.append(fs.cacheHit); // number of dir cacheline hits
         rep.append(" fCE=");

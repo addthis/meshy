@@ -20,19 +20,28 @@ import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.addthis.basis.util.Parameter;
 
+import com.addthis.meshy.service.file.FileTarget;
+
 import com.google.common.base.Objects;
+
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Meter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.socket.nio.NioSocketChannel;
 
 
 public class ChannelState extends ChannelDuplexHandler {
@@ -40,6 +49,9 @@ public class ChannelState extends ChannelDuplexHandler {
     private static final Logger log = LoggerFactory.getLogger(ChannelState.class);
     private static final int excessiveTargets = Parameter.intValue("meshy.channel.report.targets", 2000);
     private static final int excessiveSources = Parameter.intValue("meshy.channel.report.sources", 2000);
+
+    static final AtomicInteger writeSleeps = new AtomicInteger(0);
+    static final Meter sleepMeter = Metrics.newMeter(FileTarget.class, "writeSleeps", "sleeps", TimeUnit.SECONDS);
 
     public static final int MESHY_BYTE_OVERHEAD = 4 + 4 + 4;
 
@@ -51,7 +63,7 @@ public class ChannelState extends ChannelDuplexHandler {
     private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMap<>();
     private final ByteBuf buffer;
     private final Meshy meshy;
-    private final Channel channel;
+    private final NioSocketChannel channel;
 
     private READMODE mode = READMODE.ReadType;
     // last session id for which a handler was created on this channel. should always be > than the last
@@ -62,7 +74,7 @@ public class ChannelState extends ChannelDuplexHandler {
     //    private int remotePort;
     private InetSocketAddress remoteAddress;
 
-    ChannelState(Meshy meshy, Channel channel) {
+    ChannelState(Meshy meshy, NioSocketChannel channel) {
         this.meshy = meshy;
         this.channel = channel;
         this.buffer = channel.alloc().buffer(16384);
@@ -127,36 +139,54 @@ public class ChannelState extends ChannelDuplexHandler {
     }
 
     public boolean send(final ByteBuf sendBuffer, final SendWatcher watcher, final int reportBytes) {
-        if (channel.isOpen()) {
-            ChannelFuture future = channel.writeAndFlush(sendBuffer);
-            future.addListener(ignored -> {
-                meshy.sentBytes(reportBytes);
-                if (watcher != null) {
-                    watcher.sendFinished(reportBytes);
+        int attempts = 1;
+        while (channel.isActive()) {
+            if ((attempts >= 500) || channel.isWritable()) {
+                if (attempts >= 500) {
+                    log.warn("Forcing write despite channel being backed up to prevent possible distributed deadlock");
                 }
-            });
-            return true;
-        } else {
-            if (reportBytes > 0) {
-                /**
-                 * if bytes == 0 then it's a sendComplete() and
-                 * there are plenty of legit cases when a client would
-                 * disconnect before sendComplete() makes it back. best
-                 * example is StreamService when EOF framing tells the
-                 * client we're done before sendComplete() framing does.
-                 */
-                log.debug("{} writing [{}] to dead channel", this, reportBytes);
-                if (watcher != null) {
-                    /**
-                     * for accounting, rate limiting reasons, we have to report these as sent.
-                     * no need to report 0 bytes since it's an accounting no-op.
-                     */
-                    watcher.sendFinished(reportBytes);
+                ChannelFuture future = channel.writeAndFlush(sendBuffer);
+                future.addListener(ignored -> {
+                    meshy.sentBytes(reportBytes);
+                    if (watcher != null) {
+                        watcher.sendFinished(reportBytes);
+                    }
+                });
+                return true;
+            } else {
+                if ((attempts % 100) == 0) {
+                    log.info("Sleeping write because channel is unwritable. Attempt: {}, Pending Bytes: {}, State: {}",
+                             attempts, channel.unsafe().outboundBuffer().totalPendingWriteBytes(), this);
                 }
-                sendBuffer.release();
+                // if this thread is the io loop for this channel, make sure it is allowed to do writes
+                if (channel.eventLoop().inEventLoop()) {
+                    channel.unsafe().forceFlush();
+                }
+                sleepUninterruptibly(10, TimeUnit.MILLISECONDS);
+                writeSleeps.incrementAndGet();
+                sleepMeter.mark();
             }
-            return false;
+            attempts += 1;
         }
+        if (reportBytes > 0) {
+            /**
+             * if bytes == 0 then it's a sendComplete() and
+             * there are plenty of legit cases when a client would
+             * disconnect before sendComplete() makes it back. best
+             * example is StreamService when EOF framing tells the
+             * client we're done before sendComplete() framing does.
+             */
+            log.debug("{} writing [{}] to dead channel", this, reportBytes);
+            if (watcher != null) {
+                /**
+                 * for accounting, rate limiting reasons, we have to report these as sent.
+                 * no need to report 0 bytes since it's an accounting no-op.
+                 */
+                watcher.sendFinished(reportBytes);
+            }
+            sendBuffer.release();
+        }
+        return false;
     }
 
     public String getName() {

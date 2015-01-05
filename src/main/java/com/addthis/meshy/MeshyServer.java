@@ -54,8 +54,8 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 
@@ -169,11 +169,13 @@ public class MeshyServer extends Meshy {
                 .childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
                 .childOption(ChannelOption.TCP_NODELAY, true)
                 .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .childOption(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, HIGH_WATERMARK)
+                .childOption(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, LOW_WATERMARK)
                 .channel(NioServerSocketChannel.class)
                 .group(bossGroup, workerGroup)
-                .childHandler(new ChannelInitializer<SocketChannel>() {
+                .childHandler(new ChannelInitializer<NioSocketChannel>() {
                     @Override
-                    protected void initChannel(final SocketChannel ch) throws Exception {
+                    protected void initChannel(final NioSocketChannel ch) throws Exception {
                         ch.pipeline().addLast(new ChannelState(MeshyServer.this, ch));
                     }
                 });
