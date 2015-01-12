@@ -41,7 +41,10 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 
 public class ChannelState extends ChannelDuplexHandler {
@@ -141,7 +144,16 @@ public class ChannelState extends ChannelDuplexHandler {
     public boolean send(final ByteBuf sendBuffer, final SendWatcher watcher, final int reportBytes) {
         int attempts = 1;
         while (channel.isActive()) {
-            if ((attempts >= 500) || channel.isWritable()) {
+            final boolean inEventLoop = channel.eventLoop().inEventLoop();
+            // if this thread is the io loop for this channel: make sure it is allowed to do writes
+            if (inEventLoop && !channel.isWritable()) {
+                channel.unsafe().forceFlush();
+            }
+            if (channel.isWritable()
+                || (attempts >= 500)
+                // if this thread is the io loop for this channel: block writes only based on the actual socket queue;
+                // channel writability factors in queued writes from other threads that we can't get to until we finish.
+                || (inEventLoop && (channel.unsafe().outboundBuffer().size() < estimateMaxQueued(sendBuffer)))) {
                 if (attempts >= 500) {
                     log.warn("Forcing write despite channel being backed up to prevent possible distributed deadlock");
                 }
@@ -155,12 +167,11 @@ public class ChannelState extends ChannelDuplexHandler {
                 return true;
             } else {
                 if ((attempts % 100) == 0) {
-                    log.info("Sleeping write because channel is unwritable. Attempt: {}, Pending Bytes: {}, State: {}",
-                             attempts, channel.unsafe().outboundBuffer().totalPendingWriteBytes(), this);
-                }
-                // if this thread is the io loop for this channel, make sure it is allowed to do writes
-                if (channel.eventLoop().inEventLoop()) {
-                    channel.unsafe().forceFlush();
+                    ChannelOutboundBuffer outboundBuffer = channel.unsafe().outboundBuffer();
+                    if (outboundBuffer != null) {
+                        log.info("Sleeping write because channel is unwritable. Attempt: {}, Pending Bytes: {}, State: {}",
+                                 attempts, outboundBuffer.totalPendingWriteBytes(), this);
+                    }
                 }
                 sleepUninterruptibly(10, TimeUnit.MILLISECONDS);
                 writeSleeps.incrementAndGet();
@@ -187,6 +198,11 @@ public class ChannelState extends ChannelDuplexHandler {
             sendBuffer.release();
         }
         return false;
+    }
+
+    // This estimation is cheap / easy, and should keep pending writes bounded by 2 * high water mark
+    private int estimateMaxQueued(ByteBuf sendBuffer) {
+        return max(1, min(64, (channel.config().getWriteBufferHighWaterMark() / sendBuffer.readableBytes()) >> 6));
     }
 
     public String getName() {
