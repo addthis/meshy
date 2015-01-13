@@ -108,7 +108,7 @@ public class ChannelState extends ChannelDuplexHandler {
     @Override public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         meshy.updateLastEventTime();
         channelClosed();
-        meshy.channelClosed(ctx.channel());
+        meshy.channelClosed(ctx.channel(), this);
         buffer.release();
     }
 

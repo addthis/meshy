@@ -38,6 +38,7 @@ import com.addthis.basis.util.Parameter;
 import com.addthis.meshy.service.message.MessageFileSystem;
 import com.addthis.meshy.service.peer.PeerSource;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Splitter;
 
 import com.yammer.metrics.Metrics;
@@ -54,8 +55,13 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.DefaultPromise;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.concurrent.Promise;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 
@@ -141,9 +147,10 @@ public class MeshyServer extends Meshy {
     private final MeshyServerGroup group;
 
     private final Thread shutdownThread;
+    private final Promise<?> closeFuture;
 
-    private InetSocketAddress serverLocal;
-    private String serverNetIf;
+    private final InetSocketAddress serverLocal;
+    private final NetworkInterface serverNetIf;
 
     public MeshyServer(int port) throws IOException {
         this(port, new File("."));
@@ -157,7 +164,6 @@ public class MeshyServer extends Meshy {
             throws IOException {
         super();
         this.group = group;
-        this.serverPort = port;
         this.rootDir = rootDir;
         this.filesystems = loadFileSystems(rootDir);
         bossGroup = new NioEventLoopGroup(1);
@@ -181,9 +187,11 @@ public class MeshyServer extends Meshy {
                 });
         /* bind to one or more interfaces, if supplied, otherwise all */
         if ((netif == null) || (netif.length == 0)) {
-            serverLocal = new InetSocketAddress(port);
-            bootstrap.bind(serverLocal).syncUninterruptibly().channel();
+            ServerSocketChannel serverChannel =
+                    (ServerSocketChannel) bootstrap.bind(new InetSocketAddress(port)).syncUninterruptibly().channel();
+            serverLocal = serverChannel.localAddress();
         } else {
+            InetSocketAddress primaryServerLocal = null;
             for (String net : netif) {
                 NetworkInterface nicif = NetworkInterface.getByName(net);
                 if (nicif == null) {
@@ -196,18 +204,30 @@ public class MeshyServer extends Meshy {
                         log.trace("skip non-ipV4 address: {}", inAddr);
                         continue;
                     }
-                    serverLocal = new InetSocketAddress(inAddr, port);
-                    bootstrap.bind(serverLocal).syncUninterruptibly().channel();
+                    ServerSocketChannel serverChannel =
+                            (ServerSocketChannel) bootstrap.bind(new InetSocketAddress(inAddr, port))
+                                                           .syncUninterruptibly()
+                                                           .channel();
+                    if (primaryServerLocal != null) {
+                        log.info("server [{}-*] binding to extra address: {}:{}:{}",
+                                 super.getUUID(), net, addr, primaryServerLocal.getPort());
+                    }
+                    primaryServerLocal = serverChannel.localAddress();
                 }
-                serverNetIf = net;
             }
+            if (primaryServerLocal == null) {
+                throw new IllegalArgumentException("no valid interface / port specified");
+            }
+            serverLocal = primaryServerLocal;
         }
+        this.serverNetIf = NetworkInterface.getByInetAddress(serverLocal.getAddress());
+        this.serverPort = serverLocal.getPort();
         if (serverNetIf != null) {
-            serverUuid = super.getUUID() + "-" + port + "-" + serverNetIf;
+            serverUuid = super.getUUID() + "-" + serverPort + "-" + serverNetIf;
         } else {
-            serverUuid = super.getUUID() + "-" + port;
+            serverUuid = super.getUUID() + "-" + serverPort;
         }
-        log.info("server [{}] on {} @ {}", getUUID(), port, rootDir);
+        log.info("server [{}] on {} @ {}", getUUID(), serverLocal, rootDir);
         shutdownThread = new Thread() {
             public void run() {
                 log.info("Running meshy shutdown hook..");
@@ -216,6 +236,25 @@ public class MeshyServer extends Meshy {
             }
         };
         Runtime.getRuntime().addShutdownHook(shutdownThread);
+        closeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
+        closeFuture.addListener((Future<Object> future) -> {
+            try {
+                Runtime.getRuntime().removeShutdownHook(shutdownThread);
+            } catch (IllegalStateException ex) {
+                // the JVM is shutting down
+            }
+        });
+        workerGroup.terminationFuture().addListener((Future<Object> workerFuture) -> {
+            bossGroup.terminationFuture().addListener((Future<Object> bossFuture) -> {
+                if (!workerFuture.isSuccess()) {
+                    closeFuture.tryFailure(workerFuture.cause());
+                } else if (!bossFuture.isSuccess()) {
+                    closeFuture.tryFailure(bossFuture.cause());
+                } else {
+                    closeFuture.trySuccess(null);
+                }
+            });
+        });
         addMessageFileSystemPaths();
         group.join(this);
         if (autoMesh) {
@@ -274,11 +313,6 @@ public class MeshyServer extends Meshy {
         });
     }
 
-    @Override
-    public String toString() {
-        return "MS:{" + serverPort + "," + getUUID() + ",all=" + getChannelCount() + ",sm=" + getPeeredCount() + "}";
-    }
-
     public File getRootDir() {
         return rootDir;
     }
@@ -308,21 +342,20 @@ public class MeshyServer extends Meshy {
     @Override
     public void close() {
         log.debug("{} exiting", this);
+        closeAsync().syncUninterruptibly();
+    }
+
+    @Override public Future<?> closeAsync() {
         bossGroup.shutdownGracefully();
-        super.close();
-        bossGroup.terminationFuture().syncUninterruptibly();
-        try {
-            Runtime.getRuntime().removeShutdownHook(shutdownThread);
-        } catch (IllegalStateException ex) {
-            // the JVM is shutting down
-        }
+        super.closeAsync();
+        return closeFuture;
     }
 
     public int getLocalPort() {
         return serverPort;
     }
 
-    public String getNetIf() {
+    public NetworkInterface getNetIf() {
         return serverNetIf;
     }
 
@@ -449,5 +482,14 @@ public class MeshyServer extends Meshy {
                               "AutoMesh Peer Listener (port: " + port + ")");
         t.setDaemon(true);
         t.start();
+    }
+
+    @Override public String toString() {
+        return Objects.toStringHelper(this)
+                      .add("serverPort", serverPort)
+                      .add("serverUuid", serverUuid)
+                      .add("channelCount", getChannelCount())
+                      .add("peeredCount", getPeeredCount())
+                      .toString();
     }
 }

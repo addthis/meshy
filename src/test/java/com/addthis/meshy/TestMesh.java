@@ -32,14 +32,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 
 
 public class TestMesh {
 
     protected static final Logger log = LoggerFactory.getLogger(TestMesh.class);
     protected static final DecimalFormat num = new DecimalFormat("0,000");
-    protected static final AtomicInteger nextPort = new AtomicInteger((int) ((new Random().nextFloat()) * 5000) + 5000);
 
     static {
         System.setProperty("meshy.autoMesh", "false");
@@ -49,7 +48,7 @@ public class TestMesh {
 
     public static void checkFile(Map<String, FileReference> map, FileReference test) {
         FileReference check = map.get(test.name);
-        assertTrue("missing " + test.name, check != null);
+        assertNotNull("missing " + test.name, check);
         assertEquals(check.name, test.name);
         assertEquals(check.size, test.size);
         assertEquals(check.getHostUUID(), test.getHostUUID());
@@ -72,7 +71,7 @@ public class TestMesh {
     }
 
     public MeshyServer getServer(String root) throws IOException {
-        return getServer(nextPort.incrementAndGet(), root);
+        return getServer(0, root);
     }
 
     public MeshyServer getServer(int port) throws IOException {
@@ -115,6 +114,13 @@ public class TestMesh {
     @After
     public void cleanup() {
         log.info("closing resources: {}", resources.size());
+        for (Meshy meshy : resources) {
+            try {
+                meshy.closeAsync();
+            } catch (Exception ex) {
+                log.warn("unable to cleanup", ex);
+            }
+        }
         for (Meshy meshy : resources) {
             try {
                 meshy.close();

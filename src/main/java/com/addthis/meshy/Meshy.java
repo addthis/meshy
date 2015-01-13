@@ -72,6 +72,7 @@ import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.ImmediateEventExecutor;
 
 /**
@@ -204,12 +205,16 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     }
 
     @Override public void close() {
+        closeAsync().syncUninterruptibly();
+    }
+
+    public Future<?> closeAsync() {
         synchronized (connectedChannels) {
             for (ChannelState state : connectedChannels) {
                 state.debugSessions();
             }
         }
-        workerGroup.shutdownGracefully().syncUninterruptibly();
+        return workerGroup.shutdownGracefully();
     }
 
     protected ChannelFuture connect(InetSocketAddress addr) {
@@ -221,7 +226,9 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     }
 
     public int getPeeredCount() {
-        return connectedChannels.size();
+        synchronized (connectedChannels) {
+            return connectedChannels.size();
+        }
     }
 
     protected int getAndClearSent() {
@@ -302,20 +309,11 @@ public abstract class Meshy implements ChannelMaster, Closeable {
         log.debug("{} channelConnected @ {}", this, channel.remoteAddress());
     }
 
-    protected void channelClosed(Channel channel) {
+    protected void channelClosed(Channel channel, ChannelState channelState) {
         allChannels.remove(channel);
         synchronized (connectedChannels) {
-            ChannelState match = null;
-            for (ChannelState state : connectedChannels) {
-                if (state.getChannel() == channel) {
-                    match = state;
-                    break;
-                }
-            }
-            if (match != null) {
-                connectedChannels.remove(match);
-                inPeering.remove(match.getName());
-            }
+            connectedChannels.remove(channelState);
+            inPeering.remove(channelState.getName());
         }
         synchronized (channelCloseListeners) {
             for (ChannelCloseListener channelCloseListener : channelCloseListeners) {

@@ -19,6 +19,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.concurrent.SucceededFuture;
+
 
 public final class MeshyClientHelper {
 
@@ -70,6 +74,11 @@ public final class MeshyClientHelper {
                     super.close();
                 }
             }
+        }
+
+        @Override public Future<?> closeAsync() {
+            close();
+            return new SucceededFuture<>(GlobalEventExecutor.INSTANCE, null);
         }
     }
 }

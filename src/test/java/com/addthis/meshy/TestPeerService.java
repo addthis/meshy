@@ -16,6 +16,7 @@ package com.addthis.meshy;
 import java.net.InetSocketAddress;
 
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 
 import com.addthis.meshy.service.host.HostSource;
@@ -84,40 +85,34 @@ public class TestPeerService extends TestMesh {
 
     @Test
     public void manyPeers() throws Exception {
-        final int serverPort = nextPort.incrementAndGet();
         final int serverCount = 20;
-        LinkedList<MeshyServer> servers = new LinkedList<>();
+        List<MeshyServer> servers = new LinkedList<>();
         for (int i = 0; i < serverCount; i++) {
-            servers.add(getServer(nextPort.getAndIncrement()));
+            servers.add(getServer());
         }
-        MeshyServer first = servers.getFirst();
+        MeshyServer first = servers.get(0);
         for (MeshyServer server : servers) {
-            server.connectToPeer(first.getUUID(), new InetSocketAddress("localhost", serverPort));
+            server.connectToPeer(first.getUUID(), first.getLocalAddress());
         }
 
         // allow server connections to establish
-        waitQuiescent();
+        log.info("waiting for servers to become idle");
+        log.info("wait successful = {}", waitQuiescent());
 
-        for (Meshy server : servers) {
+        for (MeshyServer server : servers) {
             log.info("check connection count >> {}", server);
-        }
-        for (int i = 0; i < serverCount; i++) {
-            try (Meshy client = getClient(serverPort + i)) {
+            try (Meshy client = getClient(server.getLocalPort())) {
                 HostSource hosts = new HostSource(client);
                 hosts.sendRequest();
                 hosts.waitComplete();
                 Map<String, InetSocketAddress> hostMap = hosts.getHostMap();
-                for (MeshyServer server : servers) {
-                    if (server.getLocalAddress().getPort() == serverPort + i) {
+                for (MeshyServer peer : servers) {
+                    if (server == peer) {
                         continue;
                     }
-                    if (!hostMap.containsKey(server.getUUID())) {
-                        log.info("{} missing server --> {}", serverPort + 1, server);
-                    }
-                    assertTrue(hostMap.containsKey(server.getUUID()));
+                    assertTrue(server + " is missing peer --> " + peer, hostMap.containsKey(peer.getUUID()));
                 }
             }
         }
     }
-
 }

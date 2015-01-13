@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 
 import java.util.LinkedList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.zip.CRC32;
@@ -45,15 +46,14 @@ public class TestStreamService extends TestMesh {
 
     @Test
     public void testReadPressure() throws Exception {
-        final int serverPort = nextPort.incrementAndGet();
         final int serverCount = 20;
-        LinkedList<MeshyServer> servers = new LinkedList<>();
+        List<MeshyServer> servers = new LinkedList<>();
         for (int i = 0; i < serverCount; i++) {
-            servers.add(getServer(nextPort.getAndIncrement(), "src/test/files"));
+            servers.add(getServer("src/test/files"));
         }
-        Meshy first = servers.getFirst();
+        MeshyServer first = servers.get(0);
         for (MeshyServer server : servers) {
-            server.connectToPeer(first.getUUID(), new InetSocketAddress("localhost", serverPort));
+            server.connectToPeer(first.getUUID(), first.getLocalAddress());
         }
         // allow server connections to establish
         waitQuiescent();

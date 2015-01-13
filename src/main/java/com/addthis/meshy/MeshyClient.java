@@ -32,6 +32,9 @@ import org.slf4j.LoggerFactory;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.util.concurrent.Future;
+import io.netty.util.concurrent.GlobalEventExecutor;
+import io.netty.util.concurrent.SucceededFuture;
 
 
 public class MeshyClient extends Meshy {
@@ -116,6 +119,11 @@ public class MeshyClient extends Meshy {
                 clientChannelCloseFuture.channel().close().awaitUninterruptibly();
             }
         }
+    }
+
+    @Override public Future<?> closeAsync() {
+        close();
+        return new SucceededFuture<>(GlobalEventExecutor.INSTANCE, null);
     }
 
     public MeshyClient setBufferSize(int size) {
