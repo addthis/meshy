@@ -490,18 +490,26 @@ public class MeshyServer extends Meshy {
         return connectionFuture;
     }
 
-    public boolean promoteToNamedServerPeer(ChannelState newChannelState, String newUuid, InetSocketAddress newAddr) {
+    public boolean promoteToNamedServerPeer(ChannelState peerState, String newUuid, InetSocketAddress newAddr) {
         synchronized (connectedChannels) {
             for (ChannelState channelState : connectedChannels) {
                 if (newUuid.equals(channelState.getName())) {
+                    log.info("rejecting peerage for {} @ {} (to {} @ {}) because uuid matches existing {} for: {}",
+                             peerState.getName(), peerState.getChannelRemoteAddress(), newUuid, newAddr,
+                             channelState, this);
                     return false;
                 }
                 if (newAddr.equals(channelState.getRemoteAddress())) {
+                    log.info("rejecting peerage for {} @ {} (to {} @ {}) because address matches existing {} for: {}",
+                             peerState.getName(), peerState.getChannelRemoteAddress(), newUuid, newAddr,
+                             channelState, this);
                     return false;
                 }
             }
-            newChannelState.setName(newUuid);
-            newChannelState.setRemoteAddress(newAddr);
+            log.info("promoting {} @ {} to named server peer as {} @ {} for: {}",
+                     peerState.getName(), peerState.getChannelRemoteAddress(), newUuid, newAddr, this);
+            peerState.setName(newUuid);
+            peerState.setRemoteAddress(newAddr);
             serverPeers.incrementAndGet();
             return true;
         }

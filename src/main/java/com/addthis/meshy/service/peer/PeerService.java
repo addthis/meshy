@@ -132,16 +132,13 @@ public final class PeerService {
             InetAddress newInetAddr = newAddr.getAddress();
             /* if remote reports loopback or any-net, use peer ip addr + port */
             if (newInetAddr.isAnyLocalAddress() || newInetAddr.isLoopbackAddress()) {
-                if (isConnector) {
-                    newAddr = new InetSocketAddress(peerState.getChannel().localAddress().getAddress(), newAddr.getPort());
-                } else {
-                    newAddr = new InetSocketAddress(peerState.getChannelRemoteAddress().getAddress(), newAddr.getPort());
-                }
+                newAddr = new InetSocketAddress(peerState.getChannelRemoteAddress().getAddress(), newAddr.getPort());
+            }
+            if ((newInetAddr.isAnyLocalAddress() || newInetAddr.isLoopbackAddress()) && isConnector) {
+                newAddr = new InetSocketAddress(peerState.getChannel().localAddress().getAddress(), newAddr.getPort());
             }
 
             if (promoteToPeer) {
-                log.info("promoting {} @ {} to named server peer as {} @ {} for: {}",
-                         peerState.getName(), peerState.getChannelRemoteAddress(), newName, newAddr, master);
                 return master.promoteToNamedServerPeer(peerState, newName, newAddr);
             } else if (shouldBeConnector) {
                 log.info("dropping (and reconnecting as client) backwards connection from: {} @ {} for: {}",
