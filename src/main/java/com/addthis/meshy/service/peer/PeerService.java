@@ -133,6 +133,7 @@ public final class PeerService {
             /* if remote reports loopback or any-net, use peer ip addr + port */
             if (newInetAddr.isAnyLocalAddress() || newInetAddr.isLoopbackAddress()) {
                 newAddr = new InetSocketAddress(peerState.getChannelRemoteAddress().getAddress(), newAddr.getPort());
+                newInetAddr = newAddr.getAddress();
             }
             if ((newInetAddr.isAnyLocalAddress() || newInetAddr.isLoopbackAddress()) && isConnector) {
                 newAddr = new InetSocketAddress(peerState.getChannel().localAddress().getAddress(), newAddr.getPort());
