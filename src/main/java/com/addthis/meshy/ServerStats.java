@@ -18,15 +18,15 @@ public class ServerStats {
 
     final int bin;
     final int bout;
-    final int channelCount;
     final int peerCount;
+    final int channelCount;
 
     ServerStats(MeshyServer server) {
         bin = server.getAndClearRecv();
         bout = server.getAndClearSent();
         channelCount = server.getChannelCount();
-        peerCount = server.getPeeredCount();
+        peerCount = server.getServerPeerCount();
         MeshyServer.peerCountMetric.clear();
-        MeshyServer.peerCountMetric.inc(server.getPeeredCount());
+        MeshyServer.peerCountMetric.inc(server.getChannelCount());
     }
 }

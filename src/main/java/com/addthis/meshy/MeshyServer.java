@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
@@ -40,6 +41,7 @@ import com.addthis.meshy.service.peer.PeerSource;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Splitter;
+import com.google.common.hash.Hashing;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
@@ -145,6 +147,7 @@ public class MeshyServer extends Meshy {
     private final EventLoopGroup bossGroup;
     private final String serverUuid;
     private final MeshyServerGroup group;
+    private final AtomicInteger serverPeers;
 
     private final Thread shutdownThread;
     private final Promise<?> closeFuture;
@@ -166,6 +169,7 @@ public class MeshyServer extends Meshy {
         this.group = group;
         this.rootDir = rootDir;
         this.filesystems = loadFileSystems(rootDir);
+        this.serverPeers = new AtomicInteger(0);
         bossGroup = new NioEventLoopGroup(1);
         ServerBootstrap bootstrap = new ServerBootstrap()
                 .option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
@@ -209,8 +213,7 @@ public class MeshyServer extends Meshy {
                                                            .syncUninterruptibly()
                                                            .channel();
                     if (primaryServerLocal != null) {
-                        log.info("server [{}-*] binding to extra address: {}:{}:{}",
-                                 super.getUUID(), net, addr, primaryServerLocal.getPort());
+                        log.info("server [{}-*] binding to extra address: {}", super.getUUID(), primaryServerLocal);
                     }
                     primaryServerLocal = serverChannel.localAddress();
                 }
@@ -223,7 +226,7 @@ public class MeshyServer extends Meshy {
         this.serverNetIf = NetworkInterface.getByInetAddress(serverLocal.getAddress());
         this.serverPort = serverLocal.getPort();
         if (serverNetIf != null) {
-            serverUuid = super.getUUID() + "-" + serverPort + "-" + serverNetIf;
+            serverUuid = super.getUUID() + "-" + serverPort + "-" + serverNetIf.getName();
         } else {
             serverUuid = super.getUUID() + "-" + serverPort;
         }
@@ -333,9 +336,17 @@ public class MeshyServer extends Meshy {
         // assign unique id (local or remote inferred)
         channelState.setName("temp-uuid-" + nextSession.incrementAndGet());
         InetSocketAddress address = (InetSocketAddress) channel.remoteAddress();
-        if (needsPeering.remove(address)) {
+        if (channel.parent() == null) {
             log.debug("{} >>> starting peering with {}", MeshyServer.this, address);
             new PeerSource(this, channelState.getName());
+        }
+    }
+
+    @Override
+    protected void channelClosed(Channel channel, ChannelState channelState) {
+        super.channelClosed(channel, channelState);
+        if (channelState.getRemoteAddress() != null) {
+            serverPeers.decrementAndGet();
         }
     }
 
@@ -465,10 +476,52 @@ public class MeshyServer extends Meshy {
             }
         }
         log.debug("{} connecting to {} @ {}", this, peerUuid, pAddr);
-        /* allows us to know if *we* initiated the connection and thus must also initiate the peering */
-        needsPeering.add(pAddr);
         /* connect to peer */
-        return connect(pAddr);
+        ChannelFuture connectionFuture = connect(pAddr);
+        if (peerUuid != null) {
+            connectionFuture.addListener(f -> {
+                if (!f.isSuccess()) {
+                    synchronized (connectedChannels) {
+                        inPeering.remove(peerUuid);
+                    }
+                }
+            });
+        }
+        return connectionFuture;
+    }
+
+    public boolean promoteToNamedServerPeer(ChannelState newChannelState, String newUuid, InetSocketAddress newAddr) {
+        synchronized (connectedChannels) {
+            for (ChannelState channelState : connectedChannels) {
+                if (newUuid.equals(channelState.getName())) {
+                    return false;
+                }
+                if (newAddr.equals(channelState.getRemoteAddress())) {
+                    return false;
+                }
+            }
+            newChannelState.setName(newUuid);
+            newChannelState.setRemoteAddress(newAddr);
+            serverPeers.incrementAndGet();
+            return true;
+        }
+    }
+
+    public int getServerPeerCount() {
+        return serverPeers.get();
+    }
+
+    public boolean shouldBeConnector(String newUuid) {
+        int myHash = Hashing.murmur3_32().hashUnencodedChars(getUUID()).asInt();
+        int peerHash = Hashing.murmur3_32().hashUnencodedChars(newUuid).asInt();
+        boolean useGreater = ((myHash ^ peerHash) & 0x1) == 0;
+
+        int compareUuidStrings = getUUID().compareTo(newUuid);
+        if (useGreater) {
+            return compareUuidStrings > 0;
+        } else {
+            return compareUuidStrings < 0;
+        }
     }
 
     ServerStats getStats() {
@@ -489,7 +542,7 @@ public class MeshyServer extends Meshy {
                       .add("serverPort", serverPort)
                       .add("serverUuid", serverUuid)
                       .add("channelCount", getChannelCount())
-                      .add("peeredCount", getPeeredCount())
+                      .add("peeredCount", getServerPeerCount())
                       .toString();
     }
 }

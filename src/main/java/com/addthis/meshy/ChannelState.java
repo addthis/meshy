@@ -35,14 +35,14 @@ import com.yammer.metrics.core.Meter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.socket.nio.NioSocketChannel;
+
+import static com.google.common.util.concurrent.Uninterruptibles.sleepUninterruptibly;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
@@ -68,13 +68,15 @@ public class ChannelState extends ChannelDuplexHandler {
     private final Meshy meshy;
     private final NioSocketChannel channel;
 
+    // frame parsing state
     private READMODE mode = READMODE.ReadType;
     // last session id for which a handler was created on this channel. should always be > than the last
     private int type;
     private int session;
     private int length;
+
+    // can be concurrently modified by the peering service; guarded by the connected channels sync
     private String name;
-    //    private int remotePort;
     private InetSocketAddress remoteAddress;
 
     ChannelState(Meshy meshy, NioSocketChannel channel) {
@@ -222,16 +224,12 @@ public class ChannelState extends ChannelDuplexHandler {
         this.remoteAddress = addr;
     }
 
-    public Channel getChannel() {
+    public NioSocketChannel getChannel() {
         return channel;
     }
 
     @Nullable public InetSocketAddress getChannelRemoteAddress() {
-        if (channel != null) {
-            return (InetSocketAddress) channel.remoteAddress();
-        } else {
-            return null;
-        }
+        return channel.remoteAddress();
     }
 
     public ChannelMaster getChannelMaster() {

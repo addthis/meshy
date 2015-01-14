@@ -22,17 +22,17 @@ import org.slf4j.Logger;
 
 import io.netty.buffer.ByteBuf;
 
-public class PeerSource extends SourceHandler {
+import static com.addthis.meshy.service.peer.PeerService.decodeExtraPeers;
+import static com.addthis.meshy.service.peer.PeerService.decodePrimaryPeer;
 
-    static final Logger log = PeerService.log;
+public class PeerSource extends SourceHandler {
+    private static final Logger log = PeerService.log;
+
+    private boolean receivedStateUuid = false;
 
     public PeerSource(MeshyServer master, String tempUuid) {
         super(master, PeerTarget.class, tempUuid);
-        if (log.isDebugEnabled()) {
-            log.debug("{} encode to {}", this, getPeerString());
-        }
-        send(PeerService.encodePeer(master, null));
-        sendComplete();
+        send(PeerService.encodeSelf(master));
     }
 
     @Override
@@ -41,10 +41,19 @@ public class PeerSource extends SourceHandler {
 
     @Override
     public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("{} decode from {}", this, getPeerString());
+        log.debug("{} decode from {}", this, state);
+        if (!receivedStateUuid) {
+            if (decodePrimaryPeer((MeshyServer) getChannelMaster(), state, Meshy.getInput(length, buffer))) {
+                send(PeerService.encodeExtraPeers((MeshyServer) getChannelMaster()));
+                sendComplete();
+            } else {
+                sendComplete();
+                state.getChannel().close();
+            }
+            receivedStateUuid = true;
+        } else {
+            decodeExtraPeers((MeshyServer) getChannelMaster(), Meshy.getInput(length, buffer));
         }
-        PeerService.decodePeer((MeshyServer) getChannelMaster(), state, Meshy.getInput(length, buffer));
     }
 
     @Override

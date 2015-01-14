@@ -22,23 +22,25 @@ import java.util.Map;
 import com.addthis.meshy.service.host.HostSource;
 
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 
 public class TestPeerService extends TestMesh {
+    private static final Logger log = LoggerFactory.getLogger(TestPeerService.class);
 
     @Test
     public void twoPeers() throws Exception {
         MeshyServer server1 = getServer();
         MeshyServer server2 = getServer();
-        server1.connectPeer(new InetSocketAddress("localhost", server2.getLocalPort()));
+        log.debug("server1: {}, server2: {}", server1, server2);
+        server1.connectToPeer(server2.getUUID(), server2.getLocalAddress());
         waitQuiescent();
-        assertEquals(1, server1.getPeeredCount());
-        assertEquals(1, server2.getPeeredCount());
-        assertEquals(1, server1.getChannelCount());
-        assertEquals(1, server2.getChannelCount());
+        assertEquals(1, server1.getServerPeerCount());
+        assertEquals(1, server2.getServerPeerCount());
     }
 
     @Test
@@ -47,12 +49,14 @@ public class TestPeerService extends TestMesh {
         final MeshyServer server2 = getServer();
         final MeshyServer server3 = getServer();
         server1.connectPeer(new InetSocketAddress("localhost", server2.getLocalPort()));
+        server1.connectPeer(new InetSocketAddress("localhost", server2.getLocalPort()));
+        server1.connectPeer(new InetSocketAddress("localhost", server2.getLocalPort()));
         server1.connectPeer(new InetSocketAddress("localhost", server3.getLocalPort()));
         // allow server connections to establish
         waitQuiescent();
-        assertEquals(2, server1.getPeeredCount());
-//      assertEquals(2, server2.getPeeredCount());
-//      assertEquals(2, server3.getPeeredCount());
+        assertEquals(2, server1.getServerPeerCount());
+        assertEquals(2, server2.getServerPeerCount());
+        assertEquals(2, server3.getServerPeerCount());
         Meshy client = getClient(server1);
         HostSource hosts = new HostSource(client);
         hosts.sendRequest();
@@ -69,8 +73,8 @@ public class TestPeerService extends TestMesh {
         server2.close();
         // allow server connections to stabilize
         waitQuiescent();
-        assertEquals(1, server1.getPeeredCount());
-        assertEquals(1, server3.getPeeredCount());
+        assertEquals(1, server1.getServerPeerCount());
+        assertEquals(1, server3.getServerPeerCount());
 
         client = getClient(server1);
         hosts = new HostSource(client);

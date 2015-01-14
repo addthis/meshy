@@ -79,7 +79,7 @@ public class MeshyClient extends Meshy {
 
     @Override
     public String toString() {
-        return "MC:{" + getUUID() + ",all=" + getChannelCount() + ",sm=" + getPeeredCount() + "}";
+        return "MC:{" + getUUID() + ",sm=" + getChannelCount() + "}";
     }
 
     /**

@@ -18,32 +18,42 @@ import com.addthis.meshy.TargetHandler;
 
 import io.netty.buffer.ByteBuf;
 
+import static com.addthis.meshy.service.peer.PeerService.decodeExtraPeers;
+import static com.addthis.meshy.service.peer.PeerService.decodePrimaryPeer;
+
 public class PeerTarget extends TargetHandler {
 
-    boolean canceled = false;
+    private boolean shouldPeer = false;
+    private boolean receivedStateUuid = false;
 
     @Override
     public void receive(int length, ByteBuf buffer) throws Exception {
-        if (log.isDebugEnabled()) {
-            log.debug("{} decode from {}", this, getChannelState().getChannelRemoteAddress());
+        log.debug("{} decode from {}", this, getChannelState().getChannelRemoteAddress());
+        if (!receivedStateUuid) {
+            shouldPeer = decodePrimaryPeer(getChannelMaster(), getChannelState(), Meshy.getInput(length, buffer));
+            if (shouldPeer) {
+                log.debug("{} encode to {}", this, getChannelState().getChannelRemoteAddress());
+                send(PeerService.encodeSelf(getChannelMaster()));
+                send(PeerService.encodeExtraPeers(getChannelMaster()));
+            } else {
+                log.debug("writing peer cancel from {}", this);
+                send(new byte[] {0}); // send byte array with a single "0" byte for the empty string
+            }
+            receivedStateUuid = true;
+        } else {
+            decodeExtraPeers(getChannelMaster(), Meshy.getInput(length, buffer));
         }
-        PeerService.decodePeer(getChannelMaster(), getChannelState(), Meshy.getInput(length, buffer));
     }
 
     @Override
     public void channelClosed() {
-        canceled = true;
     }
 
     @Override
     public void receiveComplete() throws Exception {
-        if (canceled) {
-            return;
-        }
-        if (log.isDebugEnabled()) {
-            log.debug("{} encode to {}", this, getChannelState().getChannelRemoteAddress());
-        }
-        send(PeerService.encodePeer(getChannelMaster(), getChannelState()));
         sendComplete();
+        if (!shouldPeer) {
+            getChannelState().getChannel().close();
+        }
     }
 }

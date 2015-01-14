@@ -29,6 +29,8 @@ import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.MeshyServer;
 
+import com.google.common.base.Strings;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,27 +81,17 @@ public final class PeerService {
     /**
      * send local peer uuid:port and list of peers to remote
      */
-    public static byte[] encodePeer(MeshyServer master, ChannelState me) {
+    public static byte[] encodeExtraPeers(MeshyServer master) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            Bytes.writeString(master.getUUID(), out);
-            encodeAddress(master.getLocalAddress(), out);
-            if (log.isDebugEnabled()) {
-                log.debug("{} encode peer remote={}", master, me != null ? me.getChannel().remoteAddress() : "");
-            }
             for (ChannelState channelState : master.getChannels(MeshyConstants.LINK_NAMED)) {
                 Bytes.writeString(channelState.getName(), out);
                 encodeAddress(channelState.getRemoteAddress(), out);
-                if (log.isDebugEnabled()) {
-                    log.debug("{} encoded {} @ {}", master, channelState.getName(),
-                              channelState.getChannel().remoteAddress());
-                }
+                log.debug("{} encoded {} @ {}", master, channelState.getName(), channelState.getChannelRemoteAddress());
             }
             for (MeshyServer member : master.getMembers()) {
                 if (member != master && shouldEncode(member.getLocalAddress())) {
-                    if (log.isTraceEnabled()) {
-                        log.trace("encode MEMBER: {} / {}", member.getUUID(), member.getLocalAddress());
-                    }
+                    log.trace("encode MEMBER: {} / {}", member.getUUID(), member.getLocalAddress());
                     Bytes.writeString(member.getUUID(), out);
                     encodeAddress(member.getLocalAddress(), out);
                 }
@@ -111,32 +103,69 @@ public final class PeerService {
         }
     }
 
+    public static byte[] encodeSelf(MeshyServer master) {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            Bytes.writeString(master.getUUID(), out);
+            encodeAddress(master.getLocalAddress(), out);
+            return out.toByteArray();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
     /**
      * receive peer's uuid:port and peer list then connect to ones that are new to us
      */
-    public static void decodePeer(MeshyServer master, ChannelState me, InputStream in) {
+    public static boolean decodePrimaryPeer(MeshyServer master, ChannelState peerState, InputStream in) {
         try {
-            me.setName(Bytes.readString(in));
-            InetSocketAddress sockAddr = decodeAddress(in);
-            InetAddress inAddr = sockAddr.getAddress();
+            String newName = Bytes.readString(in);
+            if (Strings.isNullOrEmpty(newName)) {
+                log.debug("would-be peer is refusing peerage: sent {} from {} for {}", newName, peerState, master);
+                return false;
+            }
+            boolean shouldBeConnector = master.shouldBeConnector(newName);
+            boolean isConnector = peerState.getChannel().parent() == null;
+            boolean promoteToPeer = shouldBeConnector == isConnector;
+
+            InetSocketAddress newAddr = decodeAddress(in);
+            InetAddress newInetAddr = newAddr.getAddress();
             /* if remote reports loopback or any-net, use peer ip addr + port */
-            if (inAddr.isAnyLocalAddress() || inAddr.isLoopbackAddress()) {
-                sockAddr = new InetSocketAddress(me.getChannelRemoteAddress().getAddress(), sockAddr.getPort());
+            if (newInetAddr.isAnyLocalAddress() || newInetAddr.isLoopbackAddress()) {
+                if (isConnector) {
+                    newAddr = new InetSocketAddress(peerState.getChannel().localAddress().getAddress(), newAddr.getPort());
+                } else {
+                    newAddr = new InetSocketAddress(peerState.getChannelRemoteAddress().getAddress(), newAddr.getPort());
+                }
             }
-            me.setRemoteAddress(sockAddr);
-            if (log.isDebugEnabled()) {
-                log.debug("{} decode peer {}:{}:{}", master, me.getChannel().remoteAddress(), me.getName(),
-                          me.getRemoteAddress());
+
+            if (promoteToPeer) {
+                log.info("promoting {} @ {} to named server peer as {} @ {} for: {}",
+                         peerState.getName(), peerState.getChannelRemoteAddress(), newName, newAddr, master);
+                return master.promoteToNamedServerPeer(peerState, newName, newAddr);
+            } else if (shouldBeConnector) {
+                log.info("dropping (and reconnecting as client) backwards connection from: {} @ {} for: {}",
+                         newName, newAddr, master);
+                master.connectToPeer(newName, newAddr);
             }
+            return promoteToPeer;
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    /**
+     * receive peer's uuid:port and peer list then connect to ones that are new to us
+     */
+    public static void decodeExtraPeers(MeshyServer master, InputStream in) {
+        try {
             while (true) {
                 String peerUuid = Bytes.readString(in);
                 if (peerUuid.isEmpty()) {
                     break;
                 }
                 InetSocketAddress peerAddress = decodeAddress(in);
-                if (log.isDebugEnabled()) {
-                    log.debug("{} decoded {} @ {}", master, peerUuid, peerAddress);
-                }
+                log.debug("{} decoded {} @ {}", master, peerUuid, peerAddress);
                 peerQueue.put(new PeerTuple(master, peerUuid, peerAddress));
             }
         } catch (Exception ex) {

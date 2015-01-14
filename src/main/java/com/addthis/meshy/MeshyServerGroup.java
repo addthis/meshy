@@ -171,7 +171,6 @@ public class MeshyServerGroup {
                 bout += stats.bout;
                 String pre = byServer.size() > 1 ? (" " + index) : " ";
                 rep.append(pre + "p=" + server.getLocalPort() + "-" + server.getNetIf());
-                rep.append(pre + "mC=" + stats.channelCount); // total channel count
                 rep.append(pre + "mS=" + stats.peerCount); // fully connected channels
                 rep.append(pre + "mBI=" + stats.bin); // total bytes in
                 rep.append(pre + "mBO=" + stats.bout); // total bytes out
