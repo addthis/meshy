@@ -83,7 +83,7 @@ public class TestMesh {
     }
 
     public boolean waitQuiescent() throws InterruptedException {
-        return waitQuiescent(250, 2000);
+        return waitQuiescent(2000, 30000);
     }
 
     /**
@@ -92,7 +92,6 @@ public class TestMesh {
      * @return true if resources meet quiescent criteria
      */
     public boolean waitQuiescent(long quiescentTime, long maxWait) throws InterruptedException {
-        Thread.sleep(quiescentTime);
         long mark = JitterClock.globalTime();
         while (true) {
             long min = quiescentTime;
