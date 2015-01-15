@@ -111,19 +111,12 @@ public class MeshyClient extends Meshy {
         clientInitGate.release();
     }
 
-    @Override
-    public void close() {
-        if (closed.compareAndSet(false, true)) {
-            super.close();
-            if (clientChannelCloseFuture != null) {
-                clientChannelCloseFuture.channel().close().awaitUninterruptibly();
-            }
-        }
-    }
-
     @Override public Future<?> closeAsync() {
-        close();
-        return new SucceededFuture<>(GlobalEventExecutor.INSTANCE, null);
+        if (closed.compareAndSet(false, true)) {
+            return super.closeAsync();
+        } else {
+            return workerGroup.terminationFuture();
+        }
     }
 
     public MeshyClient setBufferSize(int size) {

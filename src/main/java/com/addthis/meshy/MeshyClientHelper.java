@@ -66,19 +66,15 @@ public final class MeshyClientHelper {
             return this;
         }
 
-        @Override
-        public void close() {
+        @Override public Future<?> closeAsync() {
             synchronized (meshyClients) {
                 if (refCount.decrementAndGet() == 0) {
                     meshyClients.remove(key);
-                    super.close();
+                    return super.closeAsync();
+                } else {
+                    return new SucceededFuture<>(GlobalEventExecutor.INSTANCE, null);
                 }
             }
-        }
-
-        @Override public Future<?> closeAsync() {
-            close();
-            return new SucceededFuture<>(GlobalEventExecutor.INSTANCE, null);
         }
     }
 }
