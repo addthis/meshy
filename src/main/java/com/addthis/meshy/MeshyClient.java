@@ -33,8 +33,6 @@ import org.slf4j.LoggerFactory;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
-import io.netty.util.concurrent.GlobalEventExecutor;
-import io.netty.util.concurrent.SucceededFuture;
 
 
 public class MeshyClient extends Meshy {

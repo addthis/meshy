@@ -13,9 +13,7 @@
  */
 package com.addthis.meshy.service.message;
 
-import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 
 import java.util.Map;
 
@@ -70,6 +68,7 @@ public class TestMessageFileSystem extends TestMesh {
         String str = Bytes.readString(in);
 
         assertEquals("rpc.reply", str);
+        provider.close();
     }
 
 }

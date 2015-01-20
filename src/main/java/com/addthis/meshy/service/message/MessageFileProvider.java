@@ -27,11 +27,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-public class MessageFileProvider implements TopicListener {
+public class MessageFileProvider implements TopicListener, AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(MessageFileProvider.class);
 
-    private final TopicSender source;
+    private final MessageSource source;
     private final HashMap<String, MessageListener> listeners = new HashMap<>();
 
     public MessageFileProvider(MeshyClient client) {
@@ -95,5 +95,10 @@ public class MessageFileProvider implements TopicListener {
     public void linkDown() {
         // subclass and override to hide this message
         log.info("link down source={} listeners={}", source, listeners);
+    }
+
+    @Override public void close() throws Exception {
+        source.sendComplete();
+        source.waitComplete();
     }
 }

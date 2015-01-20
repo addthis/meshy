@@ -359,15 +359,15 @@ public class ChannelState extends ChannelDuplexHandler {
 
     private void sessionComplete(SessionHandler handler, int sessionType, int sessionId) {
         log.debug("{} sessionComplete type={} session={}", this, sessionType, sessionId);
-        try {
-            handler.receiveComplete(this, sessionId);
-        } catch (Exception ex) {
-            log.error("suppressing handler exception during receive complete", ex);
-        }
         if (sessionType == MeshyConstants.KEY_RESPONSE) {
             sourceHandlers.remove(sessionId);
         } else {
             targetHandlers.remove(sessionId);
+        }
+        try {
+            handler.receiveComplete(this, sessionId);
+        } catch (Exception ex) {
+            log.error("suppressing handler exception during receive complete", ex);
         }
     }
 

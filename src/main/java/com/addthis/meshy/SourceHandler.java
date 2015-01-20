@@ -30,13 +30,14 @@ import com.addthis.basis.util.Parameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.addthis.meshy.ChannelState.MESHY_BYTE_OVERHEAD;
-import static com.google.common.base.Preconditions.checkArgument;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelFuture;
+
+import static com.addthis.meshy.ChannelState.MESHY_BYTE_OVERHEAD;
+import static com.google.common.base.Preconditions.checkArgument;
 
 
 public abstract class SourceHandler implements SessionHandler {
@@ -278,11 +279,14 @@ public abstract class SourceHandler implements SessionHandler {
         log.debug("{} receiveComplete.2 [{}]", this, completedSession);
         // ensure this is only called once
         if (complete.compareAndSet(false, true)) {
-            if (sent.get()) {
-                gate.release();
+            try {
+                receiveComplete();
+            } finally {
+                activeSources.remove(this);
+                if (sent.get()) {
+                    gate.release();
+                }
             }
-            receiveComplete();
-            activeSources.remove(this);
         }
     }
 

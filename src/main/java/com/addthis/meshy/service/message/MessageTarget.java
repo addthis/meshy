@@ -84,6 +84,7 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
                 listener.linkDown(this);
             }
         }
+        sendComplete();
     }
 
     @Override
