@@ -66,6 +66,7 @@ public class TestMessageFileSystem extends TestMesh {
         FileReference ref = map.get("/rpc.test/one.rpc");
         InputStream in = client.readFile(ref);
         String str = Bytes.readString(in);
+        in.close();
 
         assertEquals("rpc.reply", str);
         provider.close();

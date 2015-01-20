@@ -40,7 +40,7 @@ public class TestMessageService extends TestMesh {
         final AtomicBoolean clientRecv = new AtomicBoolean(false);
         final AtomicBoolean serverRecv = new AtomicBoolean(false);
         /** connect client and set up listener */
-        TopicSender mss = new MessageSource(client, new TopicListener() {
+        MessageSource mss = new MessageSource(client, new TopicListener() {
             @Override
             public void receiveMessage(String topic, InputStream message) throws IOException {
                 log.info("client recv: {}", topic);
@@ -80,5 +80,7 @@ public class TestMessageService extends TestMesh {
         waitQuiescent();
         assertTrue(clientRecv.get());
         assertTrue(serverRecv.get());
+        mss.sendComplete();
+        mss.waitComplete();
     }
 }
