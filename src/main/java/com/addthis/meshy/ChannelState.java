@@ -197,8 +197,8 @@ public class ChannelState extends ChannelDuplexHandler {
                  */
                 watcher.sendFinished(reportBytes);
             }
-            sendBuffer.release();
         }
+        sendBuffer.release();
         return false;
     }
 
