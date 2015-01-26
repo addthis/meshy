@@ -43,7 +43,6 @@ import com.addthis.meshy.VirtualFileFilter;
 import com.addthis.meshy.VirtualFileReference;
 import com.addthis.meshy.VirtualFileSystem;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ConcurrentHashMultiset;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -112,15 +111,17 @@ public class FileTarget extends TargetHandler implements Runnable {
     @Override
     public void receive(int length, ByteBuf buffer) throws Exception {
         if (!pathsComplete) {
-            final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
-            log.trace("{} recv scope={} msg={}", this, scope, msg);
+            byte[] bytes = Meshy.getBytes(length, buffer);
             if (scope == null) {
-                scope = msg;
-            } else if (!Strings.isNullOrEmpty(msg)) {
-                paths.add(msg);
-            } else {
-                // empty string signals end of path listings
+                scope = Bytes.toString(bytes);
+                log.trace("{} recv scope={}", this, scope);
+            } else if ((length == 1) && (bytes[0] == -1)) {
+                // a byte array of length one containing only "-1" signals the end of the paths listing.
+                // this is an invalid utf8 string, and we use it because in this protocol, we cannot send an
+                // empty string.
                 pathsComplete = true;
+            } else {
+                paths.add(Bytes.toString(bytes));
             }
         } else {
             int additionalWindow = Bytes.readInt(Meshy.getInput(length, buffer));
@@ -174,6 +175,12 @@ public class FileTarget extends TargetHandler implements Runnable {
         if (remoteSource != null) {
             remoteSource.sendComplete();
         }
+    }
+
+    @Override
+    public boolean sendComplete() {
+        autoReceiveComplete();
+        return super.sendComplete();
     }
 
     @Override

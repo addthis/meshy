@@ -21,8 +21,9 @@ import com.google.common.base.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.addthis.meshy.MeshyConstants.KEY_RESPONSE;
 import io.netty.buffer.ByteBuf;
+
+import static com.addthis.meshy.MeshyConstants.KEY_RESPONSE;
 
 
 public abstract class TargetHandler implements SessionHandler {
@@ -136,6 +137,10 @@ public abstract class TargetHandler implements SessionHandler {
             receiveComplete();
             latch.countDown();
         }
+    }
+
+    protected void autoReceiveComplete() {
+        channelState.sessionComplete(this, MeshyConstants.KEY_EXISTING, session);
     }
 
     @Override

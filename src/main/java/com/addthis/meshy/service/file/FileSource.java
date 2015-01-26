@@ -97,7 +97,7 @@ public class FileSource extends SourceHandler {
             log.trace("{} request={}", this, match);
             send(Bytes.toBytes(match));
         }
-        send(Bytes.toBytes(""));
+        send(new byte[]{-1});
         sendInitialWindowing();
     }
 

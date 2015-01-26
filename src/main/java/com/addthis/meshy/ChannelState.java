@@ -360,18 +360,22 @@ public class ChannelState extends ChannelDuplexHandler {
         buffer.discardReadBytes();
     }
 
-    private void sessionComplete(SessionHandler handler, int sessionType, int sessionId) {
-        log.debug("{} sessionComplete type={} session={}", this, sessionType, sessionId);
+    public boolean sessionComplete(SessionHandler handler, int sessionType, int sessionId) {
+        boolean wasRemoved;
         if (sessionType == MeshyConstants.KEY_RESPONSE) {
-            sourceHandlers.remove(sessionId);
+            wasRemoved = sourceHandlers.remove(sessionId) != null;
         } else {
-            targetHandlers.remove(sessionId);
+            wasRemoved = targetHandlers.remove(sessionId) != null;
         }
-        try {
-            handler.receiveComplete(this, sessionId);
-        } catch (Exception ex) {
-            log.error("suppressing handler exception during receive complete", ex);
+        if (wasRemoved) {
+            log.debug("{} sessionComplete type={} session={}", this, sessionType, sessionId);
+            try {
+                handler.receiveComplete(this, sessionId);
+            } catch (Exception ex) {
+                log.error("suppressing handler exception during receive complete", ex);
+            }
         }
+        return wasRemoved;
     }
 
     public ByteBuf allocateSendBuffer(int type, int session, byte[] data) {
