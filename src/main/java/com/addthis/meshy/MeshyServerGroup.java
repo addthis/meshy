@@ -118,10 +118,6 @@ public class MeshyServerGroup {
         rep.append(ss.sleeps); // sleeps b/c over sendWait limit
         rep.append(" cZ=");
         rep.append(ChannelState.writeSleeps.getAndSet(0)); // sleeps b/c over channel watermark
-        rep.append(" fCH=");
-        rep.append(fs.cacheHit); // number of dir cacheline hits
-        rep.append(" fCE=");
-        rep.append(fs.cacheEvict); // number of dir cacheline evictions
         rep.append(" fQ=");
         rep.append(fs.finderQueue); // number of finds waiting in queue
         rep.append(" fR=");

@@ -244,6 +244,20 @@ public abstract class SourceHandler implements SessionHandler {
         }
     }
 
+    protected boolean sendToSingleTarget(Channel channel, byte[] data) {
+        int sendType = MeshyConstants.KEY_EXISTING;
+        final ByteBufAllocator alloc = channel.alloc();
+        final ByteBuf buffer = allocateSendBuffer(alloc, sendType, session, data);
+
+        final int reportBytes = data.length;
+        log.trace("{} send {} to {}", this, buffer.capacity(), channel);
+        channel.writeAndFlush(buffer.duplicate().retain()).addListener(ignored -> {
+            master.sentBytes(reportBytes);
+        });
+        buffer.release();
+        return true;
+    }
+
     private static ByteBuf allocateSendBuffer(ByteBufAllocator alloc, int type, int session, byte[] data) {
         ByteBuf sendBuffer = alloc.buffer(MESHY_BYTE_OVERHEAD + data.length);
         sendBuffer.writeInt(type);

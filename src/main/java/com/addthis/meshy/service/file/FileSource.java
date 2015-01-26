@@ -31,15 +31,19 @@ import com.addthis.meshy.SourceHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.google.common.base.Preconditions.checkState;
 import io.netty.buffer.ByteBuf;
 
+import static com.google.common.base.Preconditions.checkState;
+
 public class FileSource extends SourceHandler {
-
     protected static final Logger log = LoggerFactory.getLogger(FileSource.class);
-    static final boolean traceComplete = Parameter.boolValue("meshy.finder.debug.complete", false);
 
+    static final int FILE_FIND_WINDOW_SIZE = Parameter.intValue("meshy.finder.window", 50_000);
+
+    // not thread safe, and only used for single-channel cases (eg. clients)
     private final LinkedList<FileReference> list = new LinkedList<>();
+    private long currentWindow = 0;
+
     protected String[] fileRequest;
     protected FileReferenceFilter filter;
 
@@ -90,7 +94,17 @@ public class FileSource extends SourceHandler {
             log.trace("{} request={}", this, match);
             send(Bytes.toBytes(match));
         }
-        sendComplete();
+        send(Bytes.toBytes(""));
+        sendInitialWindowing();
+    }
+
+    protected void sendInitialWindowing() {
+        increaseClientWindow(FILE_FIND_WINDOW_SIZE);
+    }
+
+    private void increaseClientWindow(int windowSize) {
+        this.currentWindow += windowSize;
+        send(Bytes.toBytes(windowSize));
     }
 
     @Override
@@ -112,6 +126,10 @@ public class FileSource extends SourceHandler {
 
     @Override
     public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
+        currentWindow -= 1;
+        if (currentWindow <= (FILE_FIND_WINDOW_SIZE / 2)) {
+            increaseClientWindow(FILE_FIND_WINDOW_SIZE / 2);
+        }
         /* sync not required b/c overridden in server-server calls */
         FileReference ref = new FileReference(Meshy.getBytes(length, buffer));
         if (filter == null || filter.accept(ref)) {
@@ -122,9 +140,7 @@ public class FileSource extends SourceHandler {
 
     @Override
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
-        if (traceComplete) {
-            log.info("recv.complete [{}] {}", completedSession, Strings.join(fileRequest, ","));
-        }
+        log.trace("recv.complete [{}] {}", completedSession, Strings.join(fileRequest, ","));
         super.receiveComplete(state, completedSession);
     }
 

@@ -20,11 +20,8 @@ import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -37,19 +34,21 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
-import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
-import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TargetHandler;
 import com.addthis.meshy.VirtualFileFilter;
 import com.addthis.meshy.VirtualFileReference;
 import com.addthis.meshy.VirtualFileSystem;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.ConcurrentHashMultiset;
+import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.common.util.concurrent.Uninterruptibles;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Counter;
@@ -68,16 +67,9 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     private static final Logger log = LoggerFactory.getLogger(FileTarget.class);
 
-    static final int dirCacheAge = Parameter.intValue("meshy.file.dirCacheAge", 60000);
-    static final int dirCacheSize = Parameter.intValue("meshy.file.dirCacheSize", 50);
-    static final int maxCacheTokens = Parameter.intValue("meshy.file.dirCacheTokens", 500);
     static final int finderWarnTime = Parameter.intValue("meshy.finder.warnTime", 10000);
     static final int debugCacheLine = Parameter.intValue("meshy.finder.debug.cacheLine", 5000);
 
-    static final Meter cacheHitsMeter = Metrics.newMeter(FileTarget.class, "dirCacheHits", "dirCacheHits", TimeUnit.SECONDS);
-    static final AtomicInteger cacheHits = new AtomicInteger(0);
-    static final Meter cacheEvictsMeter = Metrics.newMeter(FileTarget.class, "dirCacheEvicts", "dirCacheEvicts", TimeUnit.SECONDS);
-    static final AtomicInteger cacheEvicts = new AtomicInteger(0);
     //  Metrics version of 'finds' is handled by the localFindTimer's meter
     static final AtomicInteger finds = new AtomicInteger(0);
     static final Meter fileFindMeter = Metrics.newMeter(FileTarget.class, "allFinds", "found", TimeUnit.SECONDS);
@@ -103,68 +95,85 @@ public class FileTarget extends TargetHandler implements Runnable {
                     finderQueue,
                     new ThreadFactoryBuilder().setNameFormat("finder-%d").build()), 1, TimeUnit.SECONDS);
 
-    protected static final HashMap<ChannelMaster, VFSDirCache> cacheByMaster = new HashMap<>(1);
-
     private final long markTime = System.currentTimeMillis();
 
     private final AtomicBoolean firstDone = new AtomicBoolean(false);
+    private final AtomicBoolean canceled = new AtomicBoolean(false);
+    private final AtomicInteger currentWindow = new AtomicInteger(0);
     private final LinkedList<String> paths = new LinkedList<>();
-    private boolean canceled = false;
+
+    private boolean pathsComplete = false;
     private boolean forwardMetaData = false;
     private Future<?> findTask = null;
-    private VFSDirCache cache;
     private String scope = null;
 
+    private volatile ForwardingFileSource remoteSource = null;
+
     @Override
-    public void setContext(MeshyServer master, ChannelState state, int session) {
-        super.setContext(master, state, session);
-        synchronized (cacheByMaster) {
-            cache = cacheByMaster.get(master);
-            if (cache == null) {
-                cache = new VFSDirCache();
-                cacheByMaster.put(master, cache);
+    public void receive(int length, ByteBuf buffer) throws Exception {
+        if (!pathsComplete) {
+            final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
+            log.trace("{} recv scope={} msg={}", this, scope, msg);
+            if (scope == null) {
+                scope = msg;
+            } else if (!Strings.isNullOrEmpty(msg)) {
+                paths.add(msg);
+            } else {
+                // empty string signals end of path listings
+                pathsComplete = true;
+            }
+        } else {
+            int additionalWindow = Bytes.readInt(Meshy.getInput(length, buffer));
+            ForwardingFileSource remoteSourceRef = remoteSource;
+            if (remoteSourceRef != null) {
+                remoteSourceRef.increaseWindow(additionalWindow);
+            } else {
+                currentWindow.getAndAdd(additionalWindow);
+            }
+            if (findTask == null) {
+                startFindTask();
             }
         }
     }
 
-    @Override
-    public void receive(int length, ByteBuf buffer) throws Exception {
-        final String msg = Bytes.toString(Meshy.getBytes(length, buffer));
-        log.trace("{} recv scope={} msg={}", this, scope, msg);
-        if (scope == null) {
-            scope = msg;
-        } else {
-            paths.add(msg);
+    private void startFindTask() {
+        try {
+            if (!canceled.get()) {
+                findTask = finderPool.submit(this);
+            } else {
+                findTask = Futures.immediateCancelledFuture();
+                log.debug("skipping execution of canceled file find");
+            }
+        } catch (RejectedExecutionException ignored) {
+            log.warn("dropping find @ queue={} paths={}", finderQueue.size(), paths);
+            sendComplete();
         }
     }
 
     @Override
     public void receiveComplete() throws IOException {
-        try {
-            if (!canceled) {
-                findTask = finderPool.submit(this);
-            } else {
-                log.debug("skipping execution of canceled file find");
-            }
-        } catch (RejectedExecutionException ignored) {
-            log.warn("dropping find @ queue={} paths={}", finderQueue.size(), paths);
-            dropFind();
-        } catch (Exception ex) {
-            log.warn("FileTarget:receiveComplete() eror", ex);
+        if (findTask == null) {
+            // legacy client support
+            currentWindow.set(Integer.MAX_VALUE);
+            startFindTask();
+        } else {
+            cancelFindTask();
         }
     }
 
     @Override
     public void channelClosed() {
-        // TODO : more robust cancelation support. eg. cancel remotes as in stream service
-        if (findTask != null) {
-            findTask.cancel(false); // interrupting in some of those places would be bad
-        }
-        canceled = true;
+        cancelFindTask();
     }
 
-    private void dropFind() {
-        sendComplete();
+    private void cancelFindTask() {
+        canceled.set(true);
+        if (findTask != null) {
+            findTask.cancel(false);
+        }
+        if (remoteSource != null) {
+            remoteSource.sendComplete();
+        }
     }
 
     @Override
@@ -180,7 +189,6 @@ public class FileTarget extends TargetHandler implements Runnable {
      * perform the find. called by finder threads from an executor service. see run()
      */
     public void doFind() throws IOException {
-        FileSource fileSource = null;
         findsRunning.inc();
         try {
             //should we ask other meshy nodes for file references as well?
@@ -189,11 +197,19 @@ public class FileTarget extends TargetHandler implements Runnable {
             if (remote) { //yes, ask other meshy nodes (and ourselves)
                 forwardMetaData = "localF".equals(scope);
                 try {
-                    fileSource = new ForwardingFileSource(getChannelMaster());
-                    fileSource.requestLocalFiles(paths.toArray(new String[paths.size()]));
+                    ForwardingFileSource newRemoteSource = new ForwardingFileSource(getChannelMaster());
+                    newRemoteSource.requestLocalFiles(paths.toArray(new String[paths.size()]));
+                    remoteSource = newRemoteSource;
+                    if (canceled.get()) {
+                        remoteSource.sendComplete();
+                    } else {
+                        // catch any weird, late window changes
+                        int extraWindow = currentWindow.getAndSet(0);
+                        if (extraWindow > 0) {
+                            remoteSource.increaseWindow(extraWindow);
+                        }
+                    }
                 } catch (ChannelException ignored) {
-                    // TODO: handle without using nullity as a flag
-                    fileSource = null;
                     // can happen when there are no remote hosts
                     if (forwardMetaData) {
                         forwardPeerList(Collections.<Channel>emptyList());
@@ -226,23 +242,15 @@ public class FileTarget extends TargetHandler implements Runnable {
             //Expected conditions under which we should cleanup. If we do not expect a response from the mesh
             // (fileSource == null implies no remote request or an error attempting it; peerCount == 0 implies
             // something similar) or if the mesh has already finished responding.
-            if (fileSource == null || fileSource.getPeerCount() == 0 || !firstDone.compareAndSet(false, true)) {
+            if (remoteSource == null || remoteSource.getPeerCount() == 0 || !firstDone.compareAndSet(false, true)) {
                 findTime.addAndGet(System.currentTimeMillis() - markTime);
                 findsRunning.dec();
                 sendComplete();
+            } else if (remoteSource != null) {
+                remoteSource.increaseWindow(currentWindow.getAndSet(-1));
             }
         }
     }
-
-    /**
-     * like interning, but less OOM likely (one hopes)
-     */
-    private final LinkedHashMap<String, String> pathStrings = new LinkedHashMap<String, String>() {
-        @Override
-        public boolean removeEldestEntry(Map.Entry<String, String> entry) {
-            return size() > maxCacheTokens;
-        }
-    };
 
     /**
      * Wrapper around walk with a try/catch that swallows all exceptions (and prints some statements). Presumably
@@ -264,10 +272,11 @@ public class FileTarget extends TargetHandler implements Runnable {
      * results that it sends out may not be recieved as fast as imagined (queuing in meshy output).
      */
     private void walk(final WalkState state, final String vfsKey, final VirtualFileReference ref, final VFSPath path) throws Exception {
-        String token = path.getToken();
-        if (log.isTraceEnabled()) {
-            log.trace("walk token={} ref={} path={}", token, ref, path);
+        if (canceled.get()) {
+            return;
         }
+        String token = path.getToken();
+        log.trace("walk token={} ref={} path={}", token, ref, path);
         final boolean all = "*".equals(token);
         final boolean startsWith = !all && token.endsWith("*");
         if (startsWith) {
@@ -279,17 +288,14 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
         final boolean asDir = path.hasMoreTokens();
         final VirtualFileFilter filter = new Filter(token, all, startsWith, endsWith);
-        final String hostUuid = getChannelMaster().getUUID();
         /* possible now b/c of change to follow sym links */
         if (asDir) {
             Iterator<VirtualFileReference> files = ref.listFiles(filter);
-            if (log.isTraceEnabled()) {
-                log.trace("asDir=true filter={} hostUuid={} files={}", filter, hostUuid, files);
-            }
+            log.trace("asDir=true filter={} files={}", filter, files);
             if (files == null) {
                 return;
             }
-            while (files.hasNext()) {
+            while (files.hasNext() && !canceled.get()) {
                 VirtualFileReference next = files.next();
                 if (path.push(next.getName())) {
                     walkSafe(state, vfsKey, next, path);
@@ -299,97 +305,38 @@ public class FileTarget extends TargetHandler implements Runnable {
             }
         } else {
             long mark = debugCacheLine > 0 ? System.currentTimeMillis() : 0;
-            String pathString = null;
-            if (dirCacheSize > 0) { // if skipping questionable dir cache, then skip unused concurrency
-                pathString = Strings.cat(vfsKey, ":", path.getRealPath(), "[", token, "]");
-            /* this allows synchronizing on the path String */
-                synchronized (pathStrings) {
-                    String interned = pathStrings.get(pathString);
-                    if (interned == null) {
-                        pathStrings.put(pathString, pathString);
-                        interned = pathString;
-                    }
-                    pathString = interned;
-                }
-                VFSDirCacheLine cacheLine = null;
-            /* create "directory" cache line if missing */
-                synchronized (cache) {
-                    cacheLine = cache.get(pathString);
-                    if (cacheLine == null || !cacheLine.isValid()) {
-                        if (log.isTraceEnabled()) {
-                            log.trace("new cache-line for {} was {}", pathString, cacheLine);
-                        }
-                        cacheLine = new VFSDirCacheLine(ref);
-                        cache.put(pathString, cacheLine);
-                    } else {
-                        if (log.isTraceEnabled()) {
-                            log.trace("old cache-line for {} = {}", pathString, cacheLine);
-                        }
-                        cacheHits.incrementAndGet();
-                        cacheHitsMeter.mark();
-                    }
-                }
-            /* prevent same query from multiple clients simultaneously */
-                synchronized (cacheLine) {
-                /* use cache-line if not empty */
-                    if (!cacheLine.lines.isEmpty()) {
-                        for (FileReference cacheRef : cacheLine.lines) {
-                            if (log.isTraceEnabled()) {
-                                log.trace("cache.send {} from {} key={}", ref, cacheRef, pathString);
-                            }
-                            send(cacheRef.encode(hostUuid));
-                            found.incrementAndGet();
-                            fileFindMeter.mark();
-                        }
-                        return;
-                    }
-                /* otherwise populate cache line */
-                    Iterator<VirtualFileReference> files = ref.listFiles(filter);
-                    if (log.isTraceEnabled()) {
-                        log.trace("asDir=false filter={} hostUuid={} files={}", filter, hostUuid, files);
-                    }
-                    if (files == null) {
-                        return;
-                    }
-                    while (files.hasNext()) {
-                        VirtualFileReference next = files.next();
-                        FileReference cacheRef = new FileReference(path.getRealPath(), next);
-                        cacheLine.lines.add(cacheRef);
-                        if (log.isTraceEnabled()) {
-                            log.trace("local.send {} cache to {} in {}", cacheRef, pathString, cacheLine.hashCode());
-                        }
-                        send(cacheRef.encode(hostUuid));
-                        found.incrementAndGet();
-                        fileFindMeter.mark();
-                    }
-                }
-            } else {
-                Iterator<VirtualFileReference> files = ref.listFiles(filter);
-                if (log.isTraceEnabled()) {
-                    log.trace("asDir=false filter={} hostUuid={} files={}", filter, hostUuid, files);
-                }
-                if (files == null) {
-                    return;
-                }
-                while (files.hasNext()) {
-                    VirtualFileReference next = files.next();
-                    FileReference cacheRef = new FileReference(path.getRealPath(), next);
-                    send(cacheRef.encode(hostUuid));
-                    found.incrementAndGet();
-                    fileFindMeter.mark();
-                }
+            Iterator<VirtualFileReference> files = ref.listFiles(filter);
+            log.trace("asDir=false filter={} files={}", filter, files);
+            if (files == null) {
+                return;
+            }
+            while (files.hasNext() && !canceled.get()) {
+                VirtualFileReference next = files.next();
+                FileReference fileRef = new FileReference(path.getRealPath(), next);
+                sendLocalFileRef(fileRef);
             }
             state.files += found.get();
             if (debugCacheLine > 0) {
                 long time = System.currentTimeMillis() - mark;
                 if (time > debugCacheLine) {
-                    if (pathString == null) {
-                        pathString = Strings.cat(vfsKey, ":", path.getRealPath(), "[", token, "]");
-                    }
-                    log.warn("slow cache fill ({}) for {} {{}" + '}', time, pathString, state);
+                    String pathString = vfsKey + ":" + path.getRealPath() + "[" + token + "]";
+                    log.warn("slow ({}) for {} {{}}", time, pathString, state);
                 }
             }
         }
+    }
+
+    private boolean sendLocalFileRef(FileReference fileReference) {
+        while((currentWindow.get() == 0) && !canceled.get()) {
+            Uninterruptibles.sleepUninterruptibly(10, TimeUnit.MILLISECONDS);
+        }
+        boolean wasSent = send(fileReference.encode(getChannelMaster().getUUID()));
+        if (wasSent) {
+            found.incrementAndGet();
+            fileFindMeter.mark();
+            currentWindow.decrementAndGet();
+        }
+        return wasSent;
     }
 
     private void forwardPeerList(Collection<Channel> peerList) {
@@ -482,13 +429,73 @@ public class FileTarget extends TargetHandler implements Runnable {
     private class ForwardingFileSource extends FileSource {
 
         private final AtomicBoolean doComplete = new AtomicBoolean();
+        private final ConcurrentHashMultiset<Channel> windows = ConcurrentHashMultiset.create();
 
         public ForwardingFileSource(ChannelMaster master) {
             super(master);
         }
 
+        @Override protected void sendInitialWindowing() {
+            long totalInitialWindow = FileTarget.this.currentWindow.getAndSet(0);
+            synchronized (channels) {
+                long peerCount = getPeerCount() + 1;
+                int windowPerPeer = (int) (totalInitialWindow / peerCount);
+                for (Channel channel : channels) {
+                    windows.add(channel, windowPerPeer);
+                }
+                send(Bytes.toBytes(windowPerPeer));
+                FileTarget.this.currentWindow.addAndGet(windowPerPeer);
+            }
+        }
+
+        void increaseWindow(int additionalWindow) {
+            synchronized (channels) {
+                int peerCount = getPeerCount();
+                int totalNewWindow = windows.size() + additionalWindow;
+                int totalAddedWindow = 0;
+
+                int localWindow = FileTarget.this.currentWindow.get();
+                if (localWindow != -1) {
+                    int peerCountWithLocal = peerCount + 1;
+                    int totalNewWindowWithLocal = totalNewWindow + localWindow;
+                    int windowPerPeerWithLocal = (int) (totalNewWindowWithLocal / peerCountWithLocal);
+
+                    int prevLocalWindow = FileTarget.this.currentWindow.getAndSet(windowPerPeerWithLocal);
+                    if (prevLocalWindow != -1) {
+                        peerCount = peerCountWithLocal;
+                        totalNewWindow = totalNewWindowWithLocal;
+                        totalAddedWindow = windowPerPeerWithLocal - prevLocalWindow;
+                    } else {
+                        FileTarget.this.currentWindow.set(-1);
+                    }
+                }
+                if (peerCount <= 0) {
+                    return;
+                }
+                int windowPerPeer = (int) (totalNewWindow / peerCount);
+                for (Channel channel : channels) {
+                    if (totalAddedWindow >= additionalWindow) {
+                        break;
+                    }
+                    int prevCount = windows.setCount(channel, windowPerPeer);
+                    int countChange = windowPerPeer - prevCount;
+                    totalAddedWindow += countChange;
+                    if (totalAddedWindow > additionalWindow) {
+                        int overAllocation = (int) (totalAddedWindow - additionalWindow);
+                        windows.remove(channel, overAllocation);
+                        countChange -= overAllocation;
+                    }
+                    if (countChange > 0) {
+                        sendToSingleTarget(channel, Bytes.toBytes(countChange));
+                    }
+                }
+                FileTarget.this.currentWindow.addAndGet(totalAddedWindow - additionalWindow);
+            }
+        }
+
         @Override
         public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
+            windows.remove(state.getChannel());
             FileTarget.this.send(Meshy.getBytes(length, buffer));
         }
 
@@ -496,7 +503,9 @@ public class FileTarget extends TargetHandler implements Runnable {
         protected void start(String targetUuid) {
             super.start(targetUuid);
             if (forwardMetaData) {
-                forwardPeerList(channels);
+                synchronized (channels) {
+                    forwardPeerList(channels);
+                }
             }
         }
 
@@ -509,12 +518,13 @@ public class FileTarget extends TargetHandler implements Runnable {
                 FileReference flagRef = new FileReference("response", 0, peerCount);
                 FileTarget.this.send(flagRef.encode(state.getChannelRemoteAddress().getHostName()));
             }
-            if (doComplete.compareAndSet(true, false)) {
-                if (!firstDone.compareAndSet(false, true)) {
-                    findTime.addAndGet(System.currentTimeMillis() - markTime);
-                    findsRunning.dec();
-                    FileTarget.this.sendComplete();
-                }
+            if (doComplete.compareAndSet(true, false) && !firstDone.compareAndSet(false, true)) {
+                findTime.addAndGet(System.currentTimeMillis() - markTime);
+                findsRunning.dec();
+                FileTarget.this.sendComplete();
+            } else {
+                int remainingWindow = windows.setCount(state.getChannel(), 0);
+                increaseWindow(remainingWindow);
             }
         }
 

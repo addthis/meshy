@@ -22,8 +22,6 @@ public class FileStats {
     public final int finderQueue;
     public final long findTime;
     public final long findTimeLocal;
-    public final int cacheEvict;
-    public final int cacheHit;
 
     public FileStats() {
         finds = FileTarget.finds.getAndSet(0);
@@ -32,7 +30,5 @@ public class FileStats {
         finderQueue = FileTarget.finderQueue.size();
         findTime = FileTarget.findTime.getAndSet(0);
         findTimeLocal = FileTarget.findTimeLocal.getAndSet(0);
-        cacheEvict = FileTarget.cacheEvicts.getAndSet(0);
-        cacheHit = FileTarget.cacheHits.getAndSet(0);
     }
 }
