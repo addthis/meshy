@@ -479,24 +479,21 @@ public class FileTarget extends TargetHandler implements Runnable {
                 if (peerCount <= 0) {
                     return;
                 }
-                int windowPerPeer = (int) (totalNewWindow / peerCount);
+                int windowPerPeer = totalNewWindow / peerCount;
                 for (Channel channel : channels) {
                     if (totalAddedWindow >= additionalWindow) {
                         break;
                     }
-                    int prevCount = windows.setCount(channel, windowPerPeer);
-                    int countChange = windowPerPeer - prevCount;
+                    int prevCount = windows.count(channel);
+                    if (prevCount >= windowPerPeer) {
+                        continue;
+                    }
+                    int countChange = Math.min(windowPerPeer - prevCount, additionalWindow - totalAddedWindow);
+                    windows.add(channel, countChange);
                     totalAddedWindow += countChange;
-                    if (totalAddedWindow > additionalWindow) {
-                        int overAllocation = (int) (totalAddedWindow - additionalWindow);
-                        windows.remove(channel, overAllocation);
-                        countChange -= overAllocation;
-                    }
-                    if (countChange > 0) {
-                        sendToSingleTarget(channel, Bytes.toBytes(countChange));
-                    }
+                    sendToSingleTarget(channel, Bytes.toBytes(countChange));
                 }
-                FileTarget.this.currentWindow.addAndGet(totalAddedWindow - additionalWindow);
+                FileTarget.this.currentWindow.addAndGet(additionalWindow - totalAddedWindow);
             }
         }
 
