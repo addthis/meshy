@@ -13,20 +13,23 @@
  */
 package com.addthis.meshy.service.file;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
-import com.addthis.basis.util.Strings;
 
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.MeshyConstants;
 import com.addthis.meshy.SourceHandler;
+
+import com.google.common.base.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +47,7 @@ public class FileSource extends SourceHandler {
     private final LinkedList<FileReference> list = new LinkedList<>();
     private long currentWindow = 0;
 
-    protected String[] fileRequest;
+    protected List<String> fileRequest;
     protected FileReferenceFilter filter;
 
     public FileSource(ChannelMaster master) {
@@ -87,7 +90,7 @@ public class FileSource extends SourceHandler {
 
     private void requestFilesPostStart(String scope, String... matches) {
         checkState(fileRequest == null, "file search request already started");
-        this.fileRequest = matches;
+        this.fileRequest = Arrays.asList(matches);
         send(Bytes.toBytes(scope));
         log.debug("{} scope={}", this, scope);
         for (String match : matches) {
@@ -105,11 +108,6 @@ public class FileSource extends SourceHandler {
     private void increaseClientWindow(int windowSize) {
         this.currentWindow += windowSize;
         send(Bytes.toBytes(windowSize));
-    }
-
-    @Override
-    public String toString() {
-        return super.toString() + '(' + (fileRequest != null ? Strings.join(fileRequest, ",") : "-") + ')';
     }
 
     public Collection<FileReference> getFileList() {
@@ -140,7 +138,7 @@ public class FileSource extends SourceHandler {
 
     @Override
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
-        log.trace("recv.complete [{}] {}", completedSession, Strings.join(fileRequest, ","));
+        log.trace("recv.complete [{}] {}", completedSession, fileRequest);
         super.receiveComplete(state, completedSession);
     }
 
@@ -159,5 +157,12 @@ public class FileSource extends SourceHandler {
     @Override
     public void receiveComplete() throws Exception {
         log.debug("{} recvComplete", this);
+    }
+
+    @Override public String toString() {
+        return Objects.toStringHelper(this)
+                      .add("fileRequest", fileRequest)
+                      .add("filter", filter)
+                      .toString();
     }
 }
