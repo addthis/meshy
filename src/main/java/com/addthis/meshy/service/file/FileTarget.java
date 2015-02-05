@@ -147,7 +147,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             }
         } catch (RejectedExecutionException ignored) {
             log.warn("dropping find @ queue={} paths={}", finderQueue.size(), paths);
-            sendComplete();
+            cancelFindTask();
         }
     }
 
@@ -174,6 +174,8 @@ public class FileTarget extends TargetHandler implements Runnable {
         }
         if (remoteSource != null) {
             remoteSource.sendComplete();
+        } else {
+            sendComplete();
         }
     }
 
