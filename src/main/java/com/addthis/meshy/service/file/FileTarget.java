@@ -260,7 +260,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                 log.debug("sending complete from local find thread");
                 findTime.addAndGet(System.currentTimeMillis() - markTime);
                 findsRunning.dec();
-                sendComplete();
+                getChannelState().getChannel().eventLoop().execute(FileTarget.this::sendComplete);
             } else if (remoteSource != null) {
                 remoteSource.increaseWindow(currentWindow.getAndSet(-1));
             }
