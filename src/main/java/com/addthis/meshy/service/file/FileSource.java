@@ -138,7 +138,7 @@ public class FileSource extends SourceHandler {
 
     @Override
     public void receiveComplete(ChannelState state, int completedSession) throws Exception {
-        log.trace("recv.complete [{}] {}", completedSession, fileRequest);
+        log.debug("recv.complete [{}] {} from {}", completedSession, fileRequest, state.getName());
         super.receiveComplete(state, completedSession);
     }
 

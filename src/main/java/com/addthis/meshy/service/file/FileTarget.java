@@ -127,6 +127,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             int additionalWindow = Bytes.readInt(Meshy.getInput(length, buffer));
             ForwardingFileSource remoteSourceRef = remoteSource;
             if (remoteSourceRef != null) {
+                log.debug("received additional window allotment ({}) for {}", additionalWindow, this);
                 remoteSourceRef.increaseWindow(additionalWindow);
             } else {
                 currentWindow.getAndAdd(additionalWindow);
@@ -158,12 +159,14 @@ public class FileTarget extends TargetHandler implements Runnable {
             currentWindow.set(Integer.MAX_VALUE);
             startFindTask();
         } else {
+            log.debug("canceling find task for {} on receive complete", this);
             cancelFindTask();
         }
     }
 
     @Override
     public void channelClosed() {
+        log.debug("canceling find task for {} on channel close", this);
         cancelFindTask();
     }
 
@@ -173,6 +176,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             findTask.cancel(false);
         }
         if (remoteSource != null) {
+            log.debug("sending complete to remote source: {}", remoteSource);
             remoteSource.sendComplete();
         } else {
             sendComplete();
@@ -181,6 +185,7 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     @Override
     public boolean sendComplete() {
+        log.debug("sending complete for {}, but first triggering auto receive complete", this);
         autoReceiveComplete();
         return super.sendComplete();
     }
@@ -248,10 +253,11 @@ public class FileTarget extends TargetHandler implements Runnable {
                 FileReference flagRef = new FileReference("localfind", 0, 0);
                 FileTarget.this.send(flagRef.encode(null));
             }
-            //Expected conditions under which we should cleanup. If we do not expect a response from the mesh
-            // (fileSource == null implies no remote request or an error attempting it; peerCount == 0 implies
-            // something similar) or if the mesh has already finished responding.
-            if (remoteSource == null || remoteSource.getPeerCount() == 0 || !firstDone.compareAndSet(false, true)) {
+            //Expected conditions under which we should cleanup: If we do not expect a response from the mesh
+            // (fileSource == null implies no remote request or an error attempting it) or if the mesh has
+            // already finished responding.
+            if ((remoteSource == null) || !firstDone.compareAndSet(false, true)) {
+                log.debug("sending complete from local find thread");
                 findTime.addAndGet(System.currentTimeMillis() - markTime);
                 findsRunning.dec();
                 sendComplete();
@@ -446,18 +452,30 @@ public class FileTarget extends TargetHandler implements Runnable {
 
         @Override protected void sendInitialWindowing() {
             long totalInitialWindow = FileTarget.this.currentWindow.getAndSet(0);
-            synchronized (channels) {
-                long peerCount = getPeerCount() + 1;
-                int windowPerPeer = (int) (totalInitialWindow / peerCount);
-                for (Channel channel : channels) {
-                    windows.add(channel, windowPerPeer);
+            if (totalInitialWindow > 0) {
+                synchronized (channels) {
+                    long peerCount = getPeerCount() + 1;
+                    // add peerCount - 1 to round up the division. We'd rather have too many than too few
+                    int windowPerPeer = (int) ((totalInitialWindow + peerCount - 1) / peerCount);
+                    for (Channel channel : channels) {
+                        windows.add(channel, windowPerPeer);
+                    }
+                    send(Bytes.toBytes(windowPerPeer));
+                    FileTarget.this.currentWindow.addAndGet(windowPerPeer);
                 }
-                send(Bytes.toBytes(windowPerPeer));
-                FileTarget.this.currentWindow.addAndGet(windowPerPeer);
+            } else {
+                FileSource.log.warn("initial window was not a positive number: {}", totalInitialWindow);
             }
         }
 
         void increaseWindow(int additionalWindow) {
+            if (additionalWindow < 0) {
+                FileSource.log.warn("Someone requested a negative amount of window allotment: {}", additionalWindow);
+                return;
+            } else if (additionalWindow == 0) {
+                FileSource.log.debug("Someone requested exactly 0 more window allotment");
+                return;
+            }
             synchronized (channels) {
                 int peerCount = getPeerCount();
                 int totalNewWindow = windows.size() + additionalWindow;
@@ -467,21 +485,23 @@ public class FileTarget extends TargetHandler implements Runnable {
                 if (localWindow != -1) {
                     int peerCountWithLocal = peerCount + 1;
                     int totalNewWindowWithLocal = totalNewWindow + localWindow;
-                    int windowPerPeerWithLocal = (int) (totalNewWindowWithLocal / peerCountWithLocal);
-
-                    int prevLocalWindow = FileTarget.this.currentWindow.getAndSet(windowPerPeerWithLocal);
-                    if (prevLocalWindow != -1) {
-                        peerCount = peerCountWithLocal;
-                        totalNewWindow = totalNewWindowWithLocal;
-                        totalAddedWindow = windowPerPeerWithLocal - prevLocalWindow;
-                    } else {
-                        FileTarget.this.currentWindow.set(-1);
+                    int windowPerPeerWithLocal = (totalNewWindowWithLocal + peerCountWithLocal - 1) / peerCountWithLocal;
+                    int localWindowTargetDelta = windowPerPeerWithLocal - localWindow;
+                    if (localWindowTargetDelta > 0) {
+                        int prevLocalWindow = FileTarget.this.currentWindow.getAndAdd(localWindowTargetDelta);
+                        if (prevLocalWindow != -1) {
+                            peerCount = peerCountWithLocal;
+                            totalNewWindow = totalNewWindowWithLocal;
+                            totalAddedWindow = localWindowTargetDelta;
+                        } else {
+                            FileTarget.this.currentWindow.set(-1);
+                        }
                     }
                 }
                 if (peerCount <= 0) {
                     return;
                 }
-                int windowPerPeer = totalNewWindow / peerCount;
+                int windowPerPeer = (totalNewWindow + peerCount - 1) / peerCount;
                 for (Channel channel : channels) {
                     if (totalAddedWindow >= additionalWindow) {
                         break;
@@ -495,7 +515,10 @@ public class FileTarget extends TargetHandler implements Runnable {
                     totalAddedWindow += countChange;
                     sendToSingleTarget(channel, Bytes.toBytes(countChange));
                 }
-                FileTarget.this.currentWindow.addAndGet(additionalWindow - totalAddedWindow);
+                if (totalAddedWindow < additionalWindow) {
+                    FileSource.log.warn("Failed to allocate all of the requested window allotment ({} < {})",
+                                        totalAddedWindow, additionalWindow);
+                }
             }
         }
 
@@ -527,7 +550,9 @@ public class FileTarget extends TargetHandler implements Runnable {
             if (doComplete.compareAndSet(true, false) && !firstDone.compareAndSet(false, true)) {
                 findTime.addAndGet(System.currentTimeMillis() - markTime);
                 findsRunning.dec();
-                FileTarget.this.sendComplete();
+                FileSource.log.debug("sending complete from remote source ({}) thread", this);
+                // No. Shortcuts.
+                getChannelState().getChannel().eventLoop().execute(FileTarget.this::sendComplete);
             } else {
                 int remainingWindow = windows.setCount(state.getChannel(), 0);
                 increaseWindow(remainingWindow);
@@ -536,6 +561,7 @@ public class FileTarget extends TargetHandler implements Runnable {
 
         @Override
         public void receiveComplete() throws Exception {
+            FileSource.log.debug("receive complete on remote source ({}) for proxy {}", this, FileTarget.this);
             doComplete.set(true);
         }
     }
