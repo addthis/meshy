@@ -306,7 +306,12 @@ public class FileTarget extends TargetHandler implements Runnable {
             PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher("glob:" + token);
             files = ref.listFiles(pathMatcher);
         } else {
-            files = Iterators.singletonIterator(ref.getFile(token));
+            VirtualFileReference nextRef = ref.getFile(token);
+            if (nextRef != null) {
+                files = Iterators.singletonIterator(ref.getFile(token));
+            } else {
+                return;
+            }
         }
         log.trace("walk token={} ref={} path={} asDir={} files={}", token, ref, path, asDir, files);
         /* possible now b/c of change to follow sym links */
