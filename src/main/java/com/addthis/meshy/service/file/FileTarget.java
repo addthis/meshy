@@ -32,6 +32,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import java.nio.file.FileSystems;
+import java.nio.file.PathMatcher;
+
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Parameter;
 
@@ -39,11 +42,12 @@ import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.TargetHandler;
-import com.addthis.meshy.VirtualFileFilter;
 import com.addthis.meshy.VirtualFileReference;
 import com.addthis.meshy.VirtualFileSystem;
 
+import com.google.common.base.CharMatcher;
 import com.google.common.collect.ConcurrentHashMultiset;
+import com.google.common.collect.Iterators;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -93,6 +97,9 @@ public class FileTarget extends TargetHandler implements Runnable {
             .getExitingExecutorService(new ThreadPoolExecutor(finderThreads, finderThreads, 0L, TimeUnit.MILLISECONDS,
                     finderQueue,
                     new ThreadFactoryBuilder().setNameFormat("finder-%d").build()), 1, TimeUnit.SECONDS);
+
+    private static final String GLOB_META_CHARS = "\\*?[{";
+    private static final CharMatcher GLOB_MATCHER = CharMatcher.anyOf(GLOB_META_CHARS);
 
     private final long markTime = System.currentTimeMillis();
 
@@ -290,23 +297,20 @@ public class FileTarget extends TargetHandler implements Runnable {
         if (canceled.get()) {
             return;
         }
+        long mark = debugCacheLine > 0 ? System.currentTimeMillis() : 0;
         String token = path.getToken();
-        log.trace("walk token={} ref={} path={}", token, ref, path);
-        final boolean all = "*".equals(token);
-        final boolean startsWith = !all && token.endsWith("*");
-        if (startsWith) {
-            token = token.substring(0, token.length() - 1);
-        }
-        final boolean endsWith = !all && token.startsWith("*");
-        if (endsWith) {
-            token = token.substring(1);
-        }
+        final boolean isGlob = GLOB_MATCHER.matchesAnyOf(token);
         final boolean asDir = path.hasMoreTokens();
-        final VirtualFileFilter filter = new Filter(token, all, startsWith, endsWith);
+        Iterator<VirtualFileReference> files;
+        if (isGlob) {
+            PathMatcher pathMatcher = FileSystems.getDefault().getPathMatcher("glob:" + token);
+            files = ref.listFiles(pathMatcher);
+        } else {
+            files = Iterators.singletonIterator(ref.getFile(token));
+        }
+        log.trace("walk token={} ref={} path={} asDir={} files={}", token, ref, path, asDir, files);
         /* possible now b/c of change to follow sym links */
         if (asDir) {
-            Iterator<VirtualFileReference> files = ref.listFiles(filter);
-            log.trace("asDir=true filter={} files={}", filter, files);
             if (files == null) {
                 return;
             }
@@ -319,9 +323,6 @@ public class FileTarget extends TargetHandler implements Runnable {
                 }
             }
         } else {
-            long mark = debugCacheLine > 0 ? System.currentTimeMillis() : 0;
-            Iterator<VirtualFileReference> files = ref.listFiles(filter);
-            log.trace("asDir=false filter={} files={}", filter, files);
             if (files == null) {
                 return;
             }
@@ -331,12 +332,12 @@ public class FileTarget extends TargetHandler implements Runnable {
                 sendLocalFileRef(fileRef);
             }
             state.files += found.get();
-            if (debugCacheLine > 0) {
-                long time = System.currentTimeMillis() - mark;
-                if (time > debugCacheLine) {
-                    String pathString = vfsKey + ":" + path.getRealPath() + "[" + token + "]";
-                    log.warn("slow ({}) for {} {{}}", time, pathString, state);
-                }
+        }
+        if (debugCacheLine > 0) {
+            long time = System.currentTimeMillis() - mark;
+            if (time > debugCacheLine) {
+                String pathString = vfsKey + ":" + path.getRealPath() + "[" + token + "]";
+                log.warn("slow ({}) for {} {{}}", time, pathString, state);
             }
         }
     }

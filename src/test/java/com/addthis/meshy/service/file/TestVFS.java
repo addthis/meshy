@@ -19,12 +19,13 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
+import java.nio.file.PathMatcher;
+
 import com.addthis.meshy.LocalFileHandler;
 import com.addthis.meshy.LocalFileSystem;
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.MeshyServer;
 import com.addthis.meshy.TestMesh;
-import com.addthis.meshy.VirtualFileFilter;
 import com.addthis.meshy.VirtualFileInput;
 import com.addthis.meshy.VirtualFileReference;
 
@@ -76,7 +77,7 @@ public class TestVFS extends TestMesh {
         }
 
         @Override
-        public Iterator<VirtualFileReference> listFiles(File dir, VirtualFileFilter filter) {
+        public Iterator<VirtualFileReference> listFiles(File dir, PathMatcher filter) {
             return list.iterator();
         }
 
@@ -104,7 +105,7 @@ public class TestVFS extends TestMesh {
         }
 
         @Override
-        public Iterator<VirtualFileReference> listFiles(VirtualFileFilter filter) {
+        public Iterator<VirtualFileReference> listFiles(PathMatcher filter) {
             return null;
         }
 

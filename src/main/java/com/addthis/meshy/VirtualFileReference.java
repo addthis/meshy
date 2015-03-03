@@ -13,8 +13,12 @@
  */
 package com.addthis.meshy;
 
+import javax.annotation.Nonnull;
+
 import java.util.Iterator;
 import java.util.Map;
+
+import java.nio.file.PathMatcher;
 
 
 public interface VirtualFileReference {
@@ -25,7 +29,7 @@ public interface VirtualFileReference {
 
     public long getLength();
 
-    public Iterator<VirtualFileReference> listFiles(VirtualFileFilter filter);
+    public Iterator<VirtualFileReference> listFiles(@Nonnull PathMatcher filter);
 
     public VirtualFileReference getFile(String name);
 

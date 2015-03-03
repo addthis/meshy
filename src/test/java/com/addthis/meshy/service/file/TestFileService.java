@@ -65,6 +65,25 @@ public class TestFileService extends TestMesh {
     }
 
     @Test
+    public void globSyntax() throws Exception {
+        final MeshyServer server = getServer("src/test/files");
+        final MeshyClient client = getClient(server);
+        FileSource files = new FileSource(client, new String[]{
+                "/{a,c}/*",
+                "*/h?sts",
+        });
+        files.waitComplete();
+        log.info("file.list --> {}", files.getFileList());
+        Map<String, FileReference> map = files.getFileMap();
+        checkFile(map, new FileReference("/a/abc.xml", 0, 4).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/def.xml", 0, 7).setHostUUID(server.getUUID()));
+        assertFalse(map.containsKey("/b/ghi.xml"));
+        assertFalse(map.containsKey("/b/jkl.xml"));
+        checkFile(map, new FileReference("/c/hosts", 0, 593366).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/mux/hosts", 0, 593366).setHostUUID(server.getUUID()));
+    }
+
+    @Test
     public void multiPeer() throws Exception {
         final MeshyServer server1 = getServer("src/test/files/a");
         final MeshyServer server2 = getServer("src/test/files/b");

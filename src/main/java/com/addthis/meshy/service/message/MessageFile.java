@@ -19,9 +19,11 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
+import java.nio.file.PathMatcher;
+import java.nio.file.Paths;
+
 import com.addthis.basis.util.JitterClock;
 
-import com.addthis.meshy.VirtualFileFilter;
 import com.addthis.meshy.VirtualFileInput;
 import com.addthis.meshy.VirtualFileReference;
 
@@ -86,14 +88,14 @@ class MessageFile implements VirtualFileReference {
     }
 
     @Override
-    public Iterator<VirtualFileReference> listFiles(VirtualFileFilter filter) {
+    public Iterator<VirtualFileReference> listFiles(PathMatcher filter) {
         synchronized (files) {
             if (files.isEmpty()) {
                 return null;
             }
             ArrayList<VirtualFileReference> filtered = new ArrayList<>();
             for (MessageFile file : files.values()) {
-                if (filter.accept(file)) {
+                if (filter.matches(Paths.get(file.getName()))) {
                     filtered.add(file);
                 }
             }

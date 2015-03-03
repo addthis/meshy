@@ -13,25 +13,32 @@
  */
 package com.addthis.meshy;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import java.io.File;
 import java.io.FileInputStream;
 
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 
 import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
+
+import com.google.common.collect.Iterators;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
 public class LocalFileSystem implements VirtualFileSystem {
-
     private static final Logger log = LoggerFactory.getLogger(LocalFileSystem.class);
 
     private static LocalFileHandler[] handlers;
@@ -84,6 +91,10 @@ public class LocalFileSystem implements VirtualFileSystem {
 
         private final File ptr;
 
+        FileReference(final Path path) {
+            this.ptr = path.toFile();
+        }
+
         FileReference(final File file) {
             this.ptr = file;
         }
@@ -108,8 +119,8 @@ public class LocalFileSystem implements VirtualFileSystem {
             return ptr.length();
         }
 
-        @Override
-        public Iterator<VirtualFileReference> listFiles(final VirtualFileFilter filter) {
+        @Nullable @Override
+        public Iterator<VirtualFileReference> listFiles(@Nonnull final PathMatcher filter) {
             try {
                 return listFilesHelper(filter);
             } catch (Exception ex) {
@@ -118,7 +129,7 @@ public class LocalFileSystem implements VirtualFileSystem {
             }
         }
 
-        @Override
+        @Nullable @Override
         public VirtualFileReference getFile(String name) {
             for (LocalFileHandler handler : handlers) {
                 if (handler.canHandleDirectory(ptr)) {
@@ -132,44 +143,24 @@ public class LocalFileSystem implements VirtualFileSystem {
         /**
          * unsafe. catch delegated to wrapper
          */
-        private Iterator<VirtualFileReference> listFilesHelper(final VirtualFileFilter filter) throws Exception {
+        private Iterator<VirtualFileReference> listFilesHelper(@Nonnull final PathMatcher filter) throws Exception {
             for (LocalFileHandler handler : handlers) {
                 if (handler.canHandleDirectory(ptr)) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("delegate {} to {}", ptr, handler);
-                    }
+                    log.debug("delegate {} to {}", ptr, handler);
                     return handler.listFiles(ptr, filter);
                 }
             }
-            if (filter != null && filter.singleMatch()) {
-                Path path = ptr.toPath().resolve(filter.getToken());
-                if (Files.exists(path)) {
-                    LinkedList<VirtualFileReference> list = new LinkedList<>();
-                    list.add(new FileReference(path.toFile()));
-                    return list.iterator();
-                }
+            if (!Files.isDirectory(ptr.toPath())) {
+                return Iterators.emptyIterator();
             }
-            File[] files = ptr.listFiles();
-            if (files == null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("no files for {}", ptr);
-                }
-                return null;
+            try (Stream<Path> files = Files.list(ptr.toPath()).filter(file -> filter.matches(file.getFileName()))) {
+                return files.map(FileReference::new)
+                            .collect(Collectors.<VirtualFileReference>toList())
+                            .iterator();
             }
-            LinkedList<VirtualFileReference> list = new LinkedList<>();
-            for (File file : files) {
-                VirtualFileReference ref = new FileReference(file);
-                if (filter == null || filter.accept(ref)) {
-                    list.add(ref);
-                }
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("{} matched {}", ptr, list.size());
-            }
-            return list.iterator();
         }
 
-        @Override
+        @Nullable @Override
         public VirtualFileInput getInput(final Map<String, String> options) {
             try {
                 if (ptr.isFile() && ptr.canRead()) {

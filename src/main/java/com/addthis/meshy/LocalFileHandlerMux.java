@@ -19,6 +19,9 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 
+import java.nio.file.PathMatcher;
+import java.nio.file.Paths;
+
 import com.addthis.muxy.MuxFile;
 import com.addthis.muxy.ReadMuxFileDirectory;
 import com.addthis.muxy.ReadMuxFileDirectoryCache;
@@ -52,12 +55,12 @@ public class LocalFileHandlerMux implements LocalFileHandler {
     }
 
     @Override
-    public Iterator<VirtualFileReference> listFiles(File dir, VirtualFileFilter filter) {
+    public Iterator<VirtualFileReference> listFiles(File dir, PathMatcher filter) {
         try {
             LinkedList<VirtualFileReference> list = new LinkedList<>();
             for (MuxFile meta : ReadMuxFileDirectoryCache.listFiles(dir)) {
                 VirtualFileReference ref = new MuxFileReference(meta);
-                if (filter == null || filter.accept(ref)) {
+                if ((filter == null) || filter.matches(Paths.get(ref.getName()))) {
                     list.add(ref);
                 }
             }
@@ -104,11 +107,9 @@ public class LocalFileHandlerMux implements LocalFileHandler {
             return meta.getLength();
         }
 
-        /**
-         * mux files cannot have sub-directories
-         */
+        /** mux files cannot have sub-directories */
         @Override
-        public Iterator<VirtualFileReference> listFiles(VirtualFileFilter filter) {
+        public Iterator<VirtualFileReference> listFiles(PathMatcher filter) {
             return null;
         }
 

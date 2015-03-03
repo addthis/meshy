@@ -17,12 +17,14 @@ import java.io.File;
 
 import java.util.Iterator;
 
+import java.nio.file.PathMatcher;
+
 
 public interface LocalFileHandler {
 
     public boolean canHandleDirectory(File dir);
 
-    public Iterator<VirtualFileReference> listFiles(File dir, VirtualFileFilter filter);
+    public Iterator<VirtualFileReference> listFiles(File dir, PathMatcher filter);
 
     public VirtualFileReference getFile(File dir, String name);
 }
