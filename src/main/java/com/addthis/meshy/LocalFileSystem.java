@@ -30,7 +30,7 @@ import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 
 import com.addthis.basis.util.Parameter;
-import com.addthis.basis.util.Strings;
+import com.addthis.basis.util.LessStrings;
 
 import com.google.common.collect.Iterators;
 
@@ -52,7 +52,7 @@ public class LocalFileSystem implements VirtualFileSystem {
         if (LocalFileHandlerMux.muxEnabled) {
             list.add(new LocalFileHandlerMux());
         }
-        String[] handlerClasses = Strings.splitArray(Parameter.value("mesh.local.handlers", ""), ",");
+        String[] handlerClasses = LessStrings.splitArray(Parameter.value("mesh.local.handlers", ""), ",");
         for (String handler : handlerClasses) {
             try {
                 list.add((LocalFileHandler) (Class.forName(handler).newInstance()));
@@ -76,7 +76,7 @@ public class LocalFileSystem implements VirtualFileSystem {
 
     @Override
     public String[] tokenizePath(String path) {
-        return Strings.splitArray(path, "/");
+        return LessStrings.splitArray(path, "/");
     }
 
     @Override

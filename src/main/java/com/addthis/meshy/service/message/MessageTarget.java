@@ -19,7 +19,7 @@ import java.io.OutputStream;
 
 import java.util.HashMap;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.Meshy;
 import com.addthis.meshy.TargetHandler;
@@ -68,7 +68,7 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     @Override
     public void receive(int length, ByteBuf buffer) throws Exception {
         InputStream in = Meshy.getInput(length, buffer);
-        String topic = Bytes.readString(in);
+        String topic = LessBytes.readString(in);
         synchronized (targetListeners) {
             TargetListener listener = targetListeners.get(topic);
             if (listener != null) {
@@ -91,7 +91,7 @@ public class MessageTarget extends TargetHandler implements OutputSender, TopicS
     public OutputStream sendMessage(String topic) {
         try {
             ByteArrayOutputStream out = new SendOnCloseOutputStream(this, 4096);
-            Bytes.writeString(topic, out);
+            LessBytes.writeString(topic, out);
             return out;
         } catch (Exception ex) {
             throw new RuntimeException(ex);

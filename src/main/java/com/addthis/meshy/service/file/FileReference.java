@@ -17,7 +17,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.VirtualFileReference;
 
@@ -43,10 +43,10 @@ public class FileReference {
 
     public FileReference(final byte[] data) throws IOException {
         ByteArrayInputStream in = new ByteArrayInputStream(data);
-        name = Bytes.readString(in);
-        lastModified = Bytes.readLength(in);
-        size = Bytes.readLength(in);
-        hostUUID = Bytes.readString(in);
+        name = LessBytes.readString(in);
+        lastModified = LessBytes.readLength(in);
+        size = LessBytes.readLength(in);
+        hostUUID = LessBytes.readString(in);
     }
 
     /**
@@ -64,10 +64,10 @@ public class FileReference {
     byte[] encode(String uuid) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream(name.length() * 2 + 12);
-            Bytes.writeString(name, out);
-            Bytes.writeLength(lastModified, out);
-            Bytes.writeLength(size, out);
-            Bytes.writeString(uuid != null ? uuid : hostUUID, out);
+            LessBytes.writeString(name, out);
+            LessBytes.writeLength(lastModified, out);
+            LessBytes.writeLength(size, out);
+            LessBytes.writeString(uuid != null ? uuid : hostUUID, out);
             return out.toByteArray();
         } catch (IOException ie) {
             //using ByteArrayOutputStream. Cant actually throw these

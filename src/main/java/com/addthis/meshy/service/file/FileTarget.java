@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelMaster;
@@ -120,7 +120,7 @@ public class FileTarget extends TargetHandler implements Runnable {
         if (!pathsComplete) {
             byte[] bytes = Meshy.getBytes(length, buffer);
             if (scope == null) {
-                scope = Bytes.toString(bytes);
+                scope = LessBytes.toString(bytes);
                 log.trace("{} recv scope={}", this, scope);
             } else if ((length == 1) && (bytes[0] == -1)) {
                 // a byte array of length one containing only "-1" signals the end of the paths listing.
@@ -128,10 +128,10 @@ public class FileTarget extends TargetHandler implements Runnable {
                 // empty string.
                 pathsComplete = true;
             } else {
-                paths.add(Bytes.toString(bytes));
+                paths.add(LessBytes.toString(bytes));
             }
         } else {
-            int additionalWindow = Bytes.readInt(Meshy.getInput(length, buffer));
+            int additionalWindow = LessBytes.readInt(Meshy.getInput(length, buffer));
             ForwardingFileSource remoteSourceRef = remoteSource;
             if (remoteSourceRef != null) {
                 log.debug("received additional window allotment ({}) for {}", additionalWindow, this);
@@ -466,7 +466,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                     for (Channel channel : channels) {
                         windows.add(channel, windowPerPeer);
                     }
-                    send(Bytes.toBytes(windowPerPeer));
+                    send(LessBytes.toBytes(windowPerPeer));
                     FileTarget.this.currentWindow.addAndGet(windowPerPeer);
                 }
             } else {
@@ -519,7 +519,7 @@ public class FileTarget extends TargetHandler implements Runnable {
                     int countChange = Math.min(windowPerPeer - prevCount, additionalWindow - totalAddedWindow);
                     windows.add(channel, countChange);
                     totalAddedWindow += countChange;
-                    sendToSingleTarget(channel, Bytes.toBytes(countChange));
+                    sendToSingleTarget(channel, LessBytes.toBytes(countChange));
                 }
                 if (totalAddedWindow < additionalWindow) {
                     FileSource.log.warn("Failed to allocate all of the requested window allotment ({} < {})",

@@ -17,7 +17,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
@@ -48,7 +48,7 @@ public class MessageSource extends SourceHandler implements OutputSender, TopicS
         InputStream in = Meshy.getInput(length, buffer);
         String topic = null;
         try {
-            topic = Bytes.readString(in);
+            topic = LessBytes.readString(in);
             listener.receiveMessage(topic, in);
         } catch (Exception ex) {
             log.warn("fail to receive to topic={} listener={} in={} len-{} buf={}",
@@ -69,7 +69,7 @@ public class MessageSource extends SourceHandler implements OutputSender, TopicS
     public OutputStream sendMessage(String topic) {
         try {
             ByteArrayOutputStream out = new SendOnCloseOutputStream(this, 4096);
-            Bytes.writeString(topic, out);
+            LessBytes.writeString(topic, out);
             return out;
         } catch (Exception ex) {
             throw new RuntimeException(ex);

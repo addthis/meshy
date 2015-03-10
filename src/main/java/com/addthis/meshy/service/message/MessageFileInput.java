@@ -23,7 +23,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.VirtualFileInput;
@@ -68,15 +68,15 @@ class MessageFileInput implements VirtualFileInput, TargetListener {
             if (out == null && target instanceof InternalHandler) {
                 return ((InternalHandler) target).handleMessageRequest(name, options);
             }
-            Bytes.writeString(topicID, out);
+            LessBytes.writeString(topicID, out);
             if (options != null) {
-                Bytes.writeInt(options.size(), out);
+                LessBytes.writeInt(options.size(), out);
                 for (Map.Entry<String, String> e : options.entrySet()) {
-                    Bytes.writeString(e.getKey(), out);
-                    Bytes.writeString(e.getValue(), out);
+                    LessBytes.writeString(e.getKey(), out);
+                    LessBytes.writeString(e.getValue(), out);
                 }
             } else {
-                Bytes.writeInt(0, out);
+                LessBytes.writeInt(0, out);
             }
             out.close();
             gate.acquire();
@@ -111,7 +111,7 @@ class MessageFileInput implements VirtualFileInput, TargetListener {
     @Override
     public void receiveMessage(TopicSender ignored, String topic, InputStream in) throws IOException {
         if (topic.equals(topicID) && data == null) {
-            data = Bytes.readFully(in);
+            data = LessBytes.readFully(in);
             gate.release();
         } else {
             MessageFileSystem.log.warn("received reply on invalid topic topic={} data={}", topic,

@@ -20,7 +20,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelMaster;
@@ -91,11 +91,11 @@ public class FileSource extends SourceHandler {
     private void requestFilesPostStart(String scope, String... matches) {
         checkState(fileRequest == null, "file search request already started");
         this.fileRequest = Arrays.asList(matches);
-        send(Bytes.toBytes(scope));
+        send(LessBytes.toBytes(scope));
         log.debug("{} scope={}", this, scope);
         for (String match : matches) {
             log.trace("{} request={}", this, match);
-            send(Bytes.toBytes(match));
+            send(LessBytes.toBytes(match));
         }
         send(new byte[]{-1});
         sendInitialWindowing();
@@ -107,7 +107,7 @@ public class FileSource extends SourceHandler {
 
     private void increaseClientWindow(int windowSize) {
         this.currentWindow += windowSize;
-        send(Bytes.toBytes(windowSize));
+        send(LessBytes.toBytes(windowSize));
     }
 
     public Collection<FileReference> getFileList() {

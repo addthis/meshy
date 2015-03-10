@@ -24,7 +24,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.ChannelMaster;
 import com.addthis.meshy.ChannelState;
@@ -51,9 +51,9 @@ public class HostSource extends SourceHandler {
     public void sendRequest() {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            Bytes.writeInt(peerAdd.size(), out);
+            LessBytes.writeInt(peerAdd.size(), out);
             for (String peer : peerAdd) {
-                Bytes.writeString(peer, out);
+                LessBytes.writeString(peer, out);
             }
             send(out.toByteArray());
         } catch (Exception ex) {
@@ -77,9 +77,9 @@ public class HostSource extends SourceHandler {
     @Override
     public void receive(ChannelState state, int length, ByteBuf buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
-        int hosts = Bytes.readInt(in);
+        int hosts = LessBytes.readInt(in);
         while (hosts-- > 0) {
-            String uuid = Bytes.readString(in);
+            String uuid = LessBytes.readString(in);
             InetSocketAddress address = PeerService.decodeAddress(in);
             hostList.add(new HostNode(uuid, address));
             hostMap.put(uuid, address);

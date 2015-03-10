@@ -28,7 +28,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.zip.CRC32;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.service.peer.PeerService;
@@ -101,20 +101,20 @@ class AutoMeshTask implements Runnable {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         MeshyServer[] members = group.getMembers();
         ArrayList<MeshyServer> readyList = Lists.newArrayList(members);
-        Bytes.writeInt(readyList.size(), out);
+        LessBytes.writeInt(readyList.size(), out);
         for (MeshyServer meshy : readyList) {
-            Bytes.writeString(meshy.getUUID(), out);
+            LessBytes.writeString(meshy.getUUID(), out);
             PeerService.encodeAddress(meshy.getLocalAddress(), out);
         }
         if (secret != null) {
-            Bytes.writeString(secret, out);
+            LessBytes.writeString(secret, out);
         }
         byte[] raw = out.toByteArray();
         CRC32 crc = new CRC32();
         crc.update(raw);
         out = new ByteArrayOutputStream();
-        Bytes.writeBytes(raw, out);
-        Bytes.writeLength(crc.getValue(), out);
+        LessBytes.writeBytes(raw, out);
+        LessBytes.writeLength(crc.getValue(), out);
         DatagramPacket p = new DatagramPacket(out.toByteArray(), out.size());
         p.setAddress(InetAddress.getByAddress(new byte[]{(byte) 255, (byte) 255, (byte) 255, (byte) 255}));
         p.setPort(port);
@@ -125,8 +125,8 @@ class AutoMeshTask implements Runnable {
         InetAddress remote = packet.getAddress();
         byte[] packed = packet.getData();
         ByteArrayInputStream in = new ByteArrayInputStream(packed);
-        byte[] raw = Bytes.readBytes(in);
-        long crcValue = Bytes.readLength(in);
+        byte[] raw = LessBytes.readBytes(in);
+        long crcValue = LessBytes.readLength(in);
         CRC32 crc = new CRC32();
         crc.update(raw);
         long crcCheck = crc.getValue();
@@ -135,9 +135,9 @@ class AutoMeshTask implements Runnable {
         }
         in = new ByteArrayInputStream(raw);
         LinkedList<NodeInfo> list = new LinkedList<>();
-        int meshies = Bytes.readInt(in);
+        int meshies = LessBytes.readInt(in);
         while (meshies-- > 0) {
-            String remoteUuid = Bytes.readString(in);
+            String remoteUuid = LessBytes.readString(in);
             InetSocketAddress address = PeerService.decodeAddress(in);
             InetAddress ina = address.getAddress();
             if (ina.isAnyLocalAddress() || ina.isLoopbackAddress()) {
@@ -146,7 +146,7 @@ class AutoMeshTask implements Runnable {
             list.add(new NodeInfo(remoteUuid, address));
         }
         if (secret != null) {
-            String compare = in.available() > 0 ? Bytes.readString(in) : "";
+            String compare = in.available() > 0 ? LessBytes.readString(in) : "";
             /* discard peer's list if secret doesn't match */
             if (!secret.equals(compare)) {
                 list.clear();

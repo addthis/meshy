@@ -33,7 +33,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.service.message.MessageFileSystem;
@@ -278,10 +278,10 @@ public class MeshyServer extends Meshy {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             Map<String, Integer> stats = group.getLastStatsMap();
             try {
-                Bytes.writeInt(stats.size(), out);
+                LessBytes.writeInt(stats.size(), out);
                 for (Map.Entry<String, Integer> e : stats.entrySet()) {
-                    Bytes.writeString(e.getKey(), out);
-                    Bytes.writeInt(e.getValue(), out);
+                    LessBytes.writeString(e.getKey(), out);
+                    LessBytes.writeInt(e.getValue(), out);
                 }
             } catch (IOException e) {
                 //ByteArrayOutputStreams do not throw IOExceptions
@@ -295,18 +295,18 @@ public class MeshyServer extends Meshy {
                 try {
                     if (hostName == null) {
                         for (String peer : blockedPeers) {
-                            Bytes.writeString(peer + "\n", out);
+                            LessBytes.writeString(peer + "\n", out);
                         }
                     } else {
                         if (blockedPeers.contains(hostName)) {
-                            Bytes.writeString(hostName + " already in blocked peers\n", out);
+                            LessBytes.writeString(hostName + " already in blocked peers\n", out);
                         } else {
-                            Bytes.writeString(hostName + " added to blocked peers\n", out);
+                            LessBytes.writeString(hostName + " added to blocked peers\n", out);
                         }
                         if (dropPeer(hostName)) {
-                            Bytes.writeString(hostName + " connection closed (async)\n", out);
+                            LessBytes.writeString(hostName + " connection closed (async)\n", out);
                         } else {
-                            Bytes.writeString(hostName + " connection not found\n", out);
+                            LessBytes.writeString(hostName + " connection not found\n", out);
                         }
                     }
                 } catch (IOException ignored) {
@@ -448,7 +448,7 @@ public class MeshyServer extends Meshy {
         if (!allowPeerLocal) {
             byte[] peerAddr = pAddr.getAddress().getAddress();
             for (byte[] addr : vmLocalNet) {
-                if (Bytes.equals(peerAddr, addr)) {
+                if (LessBytes.equals(peerAddr, addr)) {
                     log.info("peer reject local {}", pAddr);
                     return null;
                 }

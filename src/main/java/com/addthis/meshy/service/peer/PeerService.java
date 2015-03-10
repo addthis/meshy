@@ -23,7 +23,7 @@ import java.net.InetSocketAddress;
 
 import java.util.concurrent.LinkedBlockingQueue;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.MeshyConstants;
@@ -70,12 +70,12 @@ public final class PeerService {
     }
 
     public static void encodeAddress(InetSocketAddress addr, OutputStream out) throws IOException {
-        Bytes.writeBytes(addr.getAddress().getAddress(), out);
-        Bytes.writeInt(addr.getPort(), out);
+        LessBytes.writeBytes(addr.getAddress().getAddress(), out);
+        LessBytes.writeInt(addr.getPort(), out);
     }
 
     public static InetSocketAddress decodeAddress(InputStream in) throws IOException {
-        return new InetSocketAddress(InetAddress.getByAddress(Bytes.readBytes(in)), Bytes.readInt(in));
+        return new InetSocketAddress(InetAddress.getByAddress(LessBytes.readBytes(in)), LessBytes.readInt(in));
     }
 
     /**
@@ -85,18 +85,18 @@ public final class PeerService {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             for (ChannelState channelState : master.getChannels(MeshyConstants.LINK_NAMED)) {
-                Bytes.writeString(channelState.getName(), out);
+                LessBytes.writeString(channelState.getName(), out);
                 encodeAddress(channelState.getRemoteAddress(), out);
                 log.debug("{} encoded {} @ {}", master, channelState.getName(), channelState.getChannelRemoteAddress());
             }
             for (MeshyServer member : master.getMembers()) {
                 if (member != master && shouldEncode(member.getLocalAddress())) {
                     log.trace("encode MEMBER: {} / {}", member.getUUID(), member.getLocalAddress());
-                    Bytes.writeString(member.getUUID(), out);
+                    LessBytes.writeString(member.getUUID(), out);
                     encodeAddress(member.getLocalAddress(), out);
                 }
             }
-            Bytes.writeString("", out);
+            LessBytes.writeString("", out);
             return out.toByteArray();
         } catch (Exception ex) {
             throw new RuntimeException(ex);
@@ -106,7 +106,7 @@ public final class PeerService {
     public static byte[] encodeSelf(MeshyServer master) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            Bytes.writeString(master.getUUID(), out);
+            LessBytes.writeString(master.getUUID(), out);
             encodeAddress(master.getLocalAddress(), out);
             return out.toByteArray();
         } catch (Exception ex) {
@@ -119,7 +119,7 @@ public final class PeerService {
      */
     public static boolean decodePrimaryPeer(MeshyServer master, ChannelState peerState, InputStream in) {
         try {
-            String newName = Bytes.readString(in);
+            String newName = LessBytes.readString(in);
             if (Strings.isNullOrEmpty(newName)) {
                 log.debug("would-be peer is refusing peerage: sent {} from {} for {}", newName, peerState, master);
                 return false;
@@ -158,7 +158,7 @@ public final class PeerService {
     public static void decodeExtraPeers(MeshyServer master, InputStream in) {
         try {
             while (true) {
-                String peerUuid = Bytes.readString(in);
+                String peerUuid = LessBytes.readString(in);
                 if (peerUuid.isEmpty()) {
                     break;
                 }

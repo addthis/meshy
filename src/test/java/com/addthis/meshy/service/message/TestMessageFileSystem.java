@@ -17,7 +17,7 @@ import java.io.InputStream;
 
 import java.util.Map;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.service.file.FileReference;
 import com.addthis.meshy.service.file.FileSource;
@@ -44,7 +44,7 @@ public class TestMessageFileSystem extends TestMesh {
         MessageFileProvider provider = new MessageFileProvider(client);
         provider.setListener("/rpc.test/one.rpc", (fileName, options, out) -> {
             /* this is the client rpc reply endpoint implementation */
-            Bytes.writeString("rpc.reply", out);
+            LessBytes.writeString("rpc.reply", out);
             /* bytes are accumulated and sent on close */
             out.close();
         });
@@ -65,7 +65,7 @@ public class TestMessageFileSystem extends TestMesh {
          */
         FileReference ref = map.get("/rpc.test/one.rpc");
         InputStream in = client.readFile(ref);
-        String str = Bytes.readString(in);
+        String str = LessBytes.readString(in);
         in.close();
 
         assertEquals("rpc.reply", str);

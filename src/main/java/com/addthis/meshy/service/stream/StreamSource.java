@@ -25,7 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelMaster;
@@ -116,14 +116,14 @@ public class StreamSource extends SourceHandler {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             out.write(params == null ? StreamService.MODE_START : StreamService.MODE_START_2);
-            Bytes.writeString(nodeUuid, out);
-            Bytes.writeString(fileName, out);
-            Bytes.writeInt(maxBufferSize, out);
+            LessBytes.writeString(nodeUuid, out);
+            LessBytes.writeString(fileName, out);
+            LessBytes.writeInt(maxBufferSize, out);
             if (params != null) {
-                Bytes.writeInt(params.size(), out);
+                LessBytes.writeInt(params.size(), out);
                 for (Map.Entry<String, String> e : params.entrySet()) {
-                    Bytes.writeString(e.getKey(), out);
-                    Bytes.writeString(e.getValue(), out);
+                    LessBytes.writeString(e.getKey(), out);
+                    LessBytes.writeString(e.getValue(), out);
                 }
             }
             if (!send(out.toByteArray())) {
@@ -155,7 +155,7 @@ public class StreamSource extends SourceHandler {
         log.trace("{} recv mode={} len={}", this, mode, length);
         switch (mode) {
             case StreamService.MODE_MORE:
-                byte[] data = Bytes.readBytes(in, in.available());
+                byte[] data = LessBytes.readBytes(in, in.available());
                 recvBytes.addAndGet((long) data.length);
                 recvBytes.addAndGet(ChannelState.MESHY_BYTE_OVERHEAD + StreamService.STREAM_BYTE_OVERHEAD);
                 messageQueue.put(data);
@@ -164,7 +164,7 @@ public class StreamSource extends SourceHandler {
                 messageQueue.put(StreamService.CLOSE_BYTES);
                 break;
             case StreamService.MODE_FAIL:
-                err = Bytes.toString(Bytes.readFully(in));
+                err = LessBytes.toString(LessBytes.readFully(in));
                 messageQueue.put(StreamService.FAIL_BYTES);
                 break;
             default:

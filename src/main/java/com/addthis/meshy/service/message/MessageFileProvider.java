@@ -19,7 +19,7 @@ import java.io.OutputStream;
 
 import java.util.HashMap;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.MeshyClient;
 
@@ -47,7 +47,7 @@ public class MessageFileProvider implements TopicListener, AutoCloseable {
             listeners.put(fileName, listener);
             OutputStream out = source.sendMessage(MessageFileSystem.MFS_ADD);
             try {
-                Bytes.writeString(fileName, out);
+                LessBytes.writeString(fileName, out);
                 out.close();
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -59,7 +59,7 @@ public class MessageFileProvider implements TopicListener, AutoCloseable {
         synchronized (listeners) {
             OutputStream out = source.sendMessage(MessageFileSystem.MFS_DEL);
             try {
-                Bytes.writeString(fileName, out);
+                LessBytes.writeString(fileName, out);
                 out.close();
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
@@ -75,14 +75,14 @@ public class MessageFileProvider implements TopicListener, AutoCloseable {
             listener = listeners.get(fileName);
         }
         if (listener != null) {
-            String topic = Bytes.readString(in);
+            String topic = LessBytes.readString(in);
             HashMap<String, String> options = null;
-            int count = Bytes.readInt(in);
+            int count = LessBytes.readInt(in);
             if (count > 0) {
                 options = new HashMap<>(count);
                 while (count > 0) {
                     count--;
-                    options.put(Bytes.readString(in), Bytes.readString(in));
+                    options.put(LessBytes.readString(in), LessBytes.readString(in));
                 }
             }
             listener.requestContents(fileName, options, source.sendMessage(topic));

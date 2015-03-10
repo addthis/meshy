@@ -20,8 +20,8 @@ import java.net.InetSocketAddress;
 
 import java.util.Collection;
 
-import com.addthis.basis.util.Bytes;
-import com.addthis.basis.util.Strings;
+import com.addthis.basis.util.LessBytes;
+import com.addthis.basis.util.LessStrings;
 
 import com.addthis.meshy.ChannelState;
 import com.addthis.meshy.Meshy;
@@ -38,9 +38,9 @@ public class HostTarget extends TargetHandler {
     @Override
     public void receive(int length, ByteBuf buffer) throws Exception {
         ByteArrayInputStream in = new ByteArrayInputStream(Meshy.getBytes(length, buffer));
-        int count = Bytes.readInt(in);
+        int count = LessBytes.readInt(in);
         while (count-- > 0) {
-            String[] peer = Strings.splitArray(Bytes.readString(in), ":");
+            String[] peer = LessStrings.splitArray(LessBytes.readString(in), ":");
             String host = peer[0];
             int port = Integer.parseInt(peer[1]);
             getChannelMaster().connectToPeer(null, new InetSocketAddress(host, port));
@@ -59,14 +59,14 @@ public class HostTarget extends TargetHandler {
         }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         Collection<ChannelState> links = getChannelMaster().getChannels(MeshyConstants.LINK_ALL);
-        Bytes.writeInt(links.size(), out);
+        LessBytes.writeInt(links.size(), out);
         for (ChannelState linkState : links) {
             InetSocketAddress remote = linkState.getRemoteAddress();
             if (remote == null) {
                 remote = (InetSocketAddress) linkState.getChannel().remoteAddress();
                 log.debug("missing remote for {} @ {}", remote, linkState);
             }
-            Bytes.writeString(linkState.getName() != null ? linkState.getName() : "<null>", out);
+            LessBytes.writeString(linkState.getName() != null ? linkState.getName() : "<null>", out);
             PeerService.encodeAddress(remote, out);
         }
         send(out.toByteArray());

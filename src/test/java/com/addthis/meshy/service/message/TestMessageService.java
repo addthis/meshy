@@ -19,7 +19,7 @@ import java.io.OutputStream;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 
 import com.addthis.meshy.MeshyClient;
 import com.addthis.meshy.MeshyServer;
@@ -45,7 +45,7 @@ public class TestMessageService extends TestMesh {
             public void receiveMessage(String topic, InputStream message) throws IOException {
                 log.info("client recv: {}", topic);
                 assertEquals("def", topic);
-                assertEquals("67890", Bytes.readString(message));
+                assertEquals("67890", LessBytes.readString(message));
                 clientRecv.set(true);
             }
 
@@ -60,9 +60,9 @@ public class TestMessageService extends TestMesh {
             public void receiveMessage(TopicSender target, String topic, InputStream message) throws IOException {
                 log.info("server recv: {}", topic);
                 assertEquals("abc", topic);
-                assertEquals("12345", Bytes.readString(message));
+                assertEquals("12345", LessBytes.readString(message));
                 OutputStream out = target.sendMessage("def");
-                Bytes.writeString("67890", out);
+                LessBytes.writeString("67890", out);
                 out.close();
                 serverRecv.set(true);
             }
@@ -74,7 +74,7 @@ public class TestMessageService extends TestMesh {
         });
         /** ping test */
         OutputStream out = mss.sendMessage("abc");
-        Bytes.writeString("12345", out);
+        LessBytes.writeString("12345", out);
         out.close();
         /** wait for quiet */
         waitQuiescent();

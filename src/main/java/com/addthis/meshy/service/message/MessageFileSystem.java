@@ -18,9 +18,9 @@ import java.io.InputStream;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.JitterClock;
-import com.addthis.basis.util.Strings;
+import com.addthis.basis.util.LessStrings;
 
 import com.addthis.meshy.VirtualFileReference;
 import com.addthis.meshy.VirtualFileSystem;
@@ -54,7 +54,7 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
 
     @Override
     public String[] tokenizePath(String path) {
-        return Strings.splitArray(path, "/");
+        return LessStrings.splitArray(path, "/");
     }
 
     @Override
@@ -81,7 +81,7 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
     }
 
     private void updatePath(TopicSender target, String fullPath, boolean add) {
-        String[] path = Strings.splitArray(fullPath, "/");
+        String[] path = LessStrings.splitArray(fullPath, "/");
         MessageFile ptr = root;
         for (int i = 0; i < path.length; i++) {
             String tok = path[i];
@@ -110,7 +110,7 @@ public class MessageFileSystem implements VirtualFileSystem, TargetListener {
         boolean add = topic.equals(MFS_ADD);
         boolean del = !add && topic.equals(MFS_DEL);
         if (add || del) {
-            String fullPath = Bytes.readString(in);
+            String fullPath = LessBytes.readString(in);
             updatePath(target, fullPath, add);
         } else {
             log.warn("unhandled receive for topic={} target={}", topic, target);

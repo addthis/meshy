@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.addthis.basis.util.Bytes;
+import com.addthis.basis.util.LessBytes;
 import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.ChannelState;
@@ -107,7 +107,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
 
     private void sendFail(String message) {
         log.debug("{} sendFail {}", this, message);
-        send(Bytes.cat(new byte[]{StreamService.MODE_FAIL}, Bytes.toBytes(message)));
+        send(LessBytes.cat(new byte[]{StreamService.MODE_FAIL}, LessBytes.toBytes(message)));
         sendComplete();
     }
 
@@ -162,9 +162,9 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
             case StreamService.MODE_START:
             case StreamService.MODE_START_2:
                 startFrameReceived = true;
-                String nodeUuid = Bytes.readString(in);
-                fileName = Bytes.readString(in);
-                maxSend = Bytes.readInt(in);
+                String nodeUuid = LessBytes.readString(in);
+                fileName = LessBytes.readString(in);
+                maxSend = LessBytes.readInt(in);
                 log.trace("{} start uuid={} file={} max={}", this, nodeUuid, fileName, maxSend);
                 if (maxSend <= 0) {
                     sendFail("invalid buffer size: " + maxSend);
@@ -177,11 +177,11 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
                 }
                 Map<String, String> params = null;
                 if (mode == StreamService.MODE_START_2) {
-                    int count = Bytes.readInt(in);
+                    int count = LessBytes.readInt(in);
                     params = new HashMap<>(count);
                     while (count-- > 0) {
-                        String key = Bytes.readString(in);
-                        String val = Bytes.readString(in);
+                        String key = LessBytes.readString(in);
+                        String val = LessBytes.readString(in);
                         params.put(key, val);
                     }
                 }
