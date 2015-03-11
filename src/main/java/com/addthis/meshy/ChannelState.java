@@ -64,9 +64,12 @@ public class ChannelState extends ChannelDuplexHandler {
 
     private final ConcurrentMap<Integer, SessionHandler> targetHandlers = new ConcurrentHashMap<>();
     private final ConcurrentMap<Integer, SourceHandler> sourceHandlers = new ConcurrentHashMap<>();
-    private final ByteBuf buffer;
     private final Meshy meshy;
     private final NioSocketChannel channel;
+
+    // internal buffer initialized when channel becomes active. Would be final, but can't reliably clean up
+    // every constructed instance (channelUnregistered is not well supported)
+    private ByteBuf buffer;
 
     // frame parsing state
     private READMODE mode = READMODE.ReadType;
@@ -82,7 +85,6 @@ public class ChannelState extends ChannelDuplexHandler {
     ChannelState(Meshy meshy, NioSocketChannel channel) {
         this.meshy = meshy;
         this.channel = channel;
-        this.buffer = channel.alloc().buffer(16384);
     }
 
     @Override public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
@@ -102,19 +104,20 @@ public class ChannelState extends ChannelDuplexHandler {
     }
 
     @Override public void channelActive(ChannelHandlerContext ctx) {
+        buffer = ctx.alloc().buffer(16384);
         meshy.updateLastEventTime();
         channelConnected();
         meshy.channelConnected(ctx.channel(), this);
     }
 
     @Override public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        meshy.updateLastEventTime();
-        channelClosed();
-        meshy.channelClosed(ctx.channel(), this);
-    }
-
-    @Override public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        buffer.release();
+        try {
+            meshy.updateLastEventTime();
+            channelClosed();
+            meshy.channelClosed(ctx.channel(), this);
+        } finally {
+            buffer.release();
+        }
     }
 
     protected Objects.ToStringHelper toStringHelper() {
