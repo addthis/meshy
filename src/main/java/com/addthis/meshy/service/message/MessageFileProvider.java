@@ -44,7 +44,10 @@ public class MessageFileProvider implements TopicListener, AutoCloseable {
             return;
         }
         synchronized (listeners) {
-            listeners.put(fileName, listener);
+            if (listeners.put(fileName, listener) != null) {
+                log.error("preventing override of file listener for {}", fileName);
+                return;
+            }
             OutputStream out = source.sendMessage(MessageFileSystem.MFS_ADD);
             try {
                 LessBytes.writeString(fileName, out);
@@ -57,6 +60,10 @@ public class MessageFileProvider implements TopicListener, AutoCloseable {
 
     public void deleteListener(String fileName) {
         synchronized (listeners) {
+            if (listeners.remove(fileName) == null) {
+                log.error("attempting to remove absent listener for {}", fileName);
+                return;
+            }
             OutputStream out = source.sendMessage(MessageFileSystem.MFS_DEL);
             try {
                 LessBytes.writeString(fileName, out);
@@ -64,7 +71,6 @@ public class MessageFileProvider implements TopicListener, AutoCloseable {
             } catch (Exception ex) {
                 throw new RuntimeException(ex);
             }
-            listeners.remove(fileName);
         }
     }
 
