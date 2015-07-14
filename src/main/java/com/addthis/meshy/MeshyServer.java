@@ -149,7 +149,6 @@ public class MeshyServer extends Meshy {
     private final MeshyServerGroup group;
     private final AtomicInteger serverPeers;
 
-    private final Thread shutdownThread;
     private final Promise<?> closeFuture;
 
     private final InetSocketAddress serverLocal;
@@ -231,22 +230,7 @@ public class MeshyServer extends Meshy {
             serverUuid = super.getUUID() + "-" + serverPort;
         }
         log.info("server [{}] on {} @ {}", getUUID(), serverLocal, rootDir);
-        shutdownThread = new Thread() {
-            public void run() {
-                log.info("Running meshy shutdown hook..");
-                close();
-                log.info("Shutdown hook for meshy complete.");
-            }
-        };
-        Runtime.getRuntime().addShutdownHook(shutdownThread);
         closeFuture = new DefaultPromise<>(GlobalEventExecutor.INSTANCE);
-        closeFuture.addListener((Future<Object> future) -> {
-            try {
-                Runtime.getRuntime().removeShutdownHook(shutdownThread);
-            } catch (IllegalStateException ex) {
-                // the JVM is shutting down
-            }
-        });
         workerGroup.terminationFuture().addListener((Future<Object> workerFuture) -> {
             bossGroup.terminationFuture().addListener((Future<Object> bossFuture) -> {
                 if (!workerFuture.isSuccess()) {
@@ -359,6 +343,10 @@ public class MeshyServer extends Meshy {
     @Override public Future<?> closeAsync() {
         bossGroup.shutdownGracefully();
         super.closeAsync();
+        return closeFuture;
+    }
+
+    public Future<?> closeFuture() {
         return closeFuture;
     }
 

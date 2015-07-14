@@ -60,20 +60,13 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     static final LinkedBlockingQueue<Runnable> senderQueue =
             new LinkedBlockingQueue<>(MAX_OPEN_STREAMS - SENDER_THREADS);
 
-    private static final ExecutorService senderPool = MoreExecutors.getExitingExecutorService(
-            new ThreadPoolExecutor(SENDER_THREADS, SENDER_THREADS,
-                                   0L, TimeUnit.MILLISECONDS, senderQueue,
-                                   new ThreadFactoryBuilder().setNameFormat("sender-%d").build()),
-            1, TimeUnit.SECONDS);
+    private static final ExecutorService senderPool = new ThreadPoolExecutor(
+            SENDER_THREADS, SENDER_THREADS, 0L, TimeUnit.MILLISECONDS, senderQueue,
+            new ThreadFactoryBuilder().setNameFormat("sender-%d").setDaemon(true).build());
 
-    private static final ExecutorService inMemorySenderPool =
-            MoreExecutors.getExitingExecutorService(
-                    new ThreadPoolExecutor(SENDER_THREADS, SENDER_THREADS,
-                                           0L, TimeUnit.MILLISECONDS,
-                                           new LinkedBlockingQueue<Runnable>(),
-                                           new ThreadFactoryBuilder().setNameFormat(
-                                                   "inMemorySender-%d").build()), 1,
-                    TimeUnit.SECONDS);
+    private static final ExecutorService inMemorySenderPool = new ThreadPoolExecutor(
+            SENDER_THREADS, SENDER_THREADS, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(),
+            new ThreadFactoryBuilder().setNameFormat("inMemorySender-%d").setDaemon(true).build());
 
     //closed is only set to true in modeClose
     private final AtomicBoolean closed         = new AtomicBoolean(false);

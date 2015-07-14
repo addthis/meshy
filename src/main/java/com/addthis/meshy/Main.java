@@ -40,6 +40,8 @@ import com.addthis.meshy.service.host.HostNode;
 import com.addthis.meshy.service.host.HostSource;
 import com.addthis.meshy.service.stream.StreamSource;
 
+import io.netty.util.concurrent.Future;
+
 public final class Main {
 
     public static void main(String[] args) throws Exception {
@@ -47,17 +49,17 @@ public final class Main {
             System.out.println("usage: client <host> <port> [cmd] [arg] ... | server <port,port> [root_dir] [peer,peer]");
             return;
         }
-        if (args[0].equals("client") && args.length > 2) {
+        if ("client".equals(args[0]) && (args.length > 2)) {
             try (Meshy more = new MeshyClient(args[1], Integer.parseInt(args[2]))) {
                 if (args.length > 3) {
                     String cmd = args[3];
-                    if (cmd.equals("ls") && args.length > 4) {
+                    if ("ls".equals(cmd) && (args.length > 4)) {
                         FileSource fileSource = new FileSource(more, new String[]{args[4]});
                         fileSource.waitComplete();
                         for (FileReference file : fileSource.getFileList()) {
                             System.out.println(file.getHostUUID() + " " + file.name + " \t " + file.size + " \t " + new Date(file.lastModified));
                         }
-                    } else if (cmd.equals("cat") && args.length > 5) {
+                    } else if ("cat".equals(cmd) && (args.length > 5)) {
                         StreamSource source = null;
                         String uuid = args[4];
                         String file = args[5];
@@ -67,7 +69,7 @@ public final class Main {
                             params = new HashMap<>();
                             for (int i = 6; i < args.length; i++) {
                                 String[] kv = LessStrings.splitArray(args[i], "=");
-                                if (kv[0].equals("--buffer")) {
+                                if ("--buffer".equals(kv[0])) {
                                     buffer = Integer.parseInt(kv[1]);
                                 } else {
                                     params.put(kv[0], kv[1]);
@@ -91,7 +93,7 @@ public final class Main {
                             }
                         }
                         source.waitComplete();
-                    } else if (cmd.equals("peer")) {
+                    } else if ("peer".equals(cmd)) {
                         HostSource hostSource = new HostSource(more);
                         for (int i = 4; i < args.length; i++) {
                             hostSource.addPeer(args[i]);
@@ -101,7 +103,7 @@ public final class Main {
                         for (HostNode node : hostSource.getHostList()) {
                             System.out.println(node.uuid + " \t " + node.address);
                         }
-                    } else if (cmd.equals("madcat") && args.length > 5) {
+                    } else if ("madcat".equals(cmd) && (args.length > 5)) {
                     /* usage: madcat <readers> <bufferSize> <filematch> */
                         int threads = Integer.parseInt(args[4]);
                         final int bufferSize = Integer.parseInt(args[5]);
@@ -186,7 +188,7 @@ public final class Main {
                         }
 
                         List<SourceReader> readers = new LinkedList<>();
-                        while (fsIter.hasNext() && threads-- > 0) {
+                        while (fsIter.hasNext() && (threads-- > 0)) {
                             readers.add(new SourceReader(fsIter.next()));
                         }
                         System.out.println("reading " + readers.size() + " sources");
@@ -197,7 +199,7 @@ public final class Main {
                         for (Thread t : readers) {
                             t.join();
                         }
-                        mark = JitterClock.globalTime() - mark + 1;
+                        mark = (JitterClock.globalTime() - mark) + 1;
                         for (Map.Entry<FileReference, Long> e : perfData.entrySet()) {
                             System.out.println(">> " + e.getKey() + " read in " + e.getValue() + " ms");
                         }
@@ -206,7 +208,7 @@ public final class Main {
                 }
 
             }
-        } else if (args[0].equals("server") && args.length >= 2) {
+        } else if ("server".equals(args[0]) && (args.length >= 2)) {
             /**
              * server [port,port]
              * server [port,port] [rootDir]
@@ -233,11 +235,28 @@ public final class Main {
                         break;
                 }
             }
+            for (MeshyServer server : meshNodes) {
+                Thread shutdownThread = new Thread(() -> {
+                        MeshyServer.log.info("Running meshy shutdown hook..");
+                        server.close();
+                        MeshyServer.log.info("Shutdown hook for meshy complete.");
+                }, "Shutdown hook for " + server.getUUID());
+                Runtime.getRuntime().addShutdownHook(shutdownThread);
+                server.closeFuture().addListener((Future<Object> future) -> {
+                    try {
+                        Runtime.getRuntime().removeShutdownHook(shutdownThread);
+                    } catch (IllegalStateException ex) {
+                        // the JVM is shutting down
+                    }
+                });
+            }
             if (args.length == 4) {
                 for (String peer : LessStrings.splitArray(args[3], ",")) {
                     for (MeshyServer meshNode : meshNodes) {
                         String[] hostPort = LessStrings.splitArray(peer, ":");
-                        int port = hostPort.length > 1 ? Integer.parseInt(hostPort[1]) : meshNode.getLocalAddress().getPort();
+                        int port = (hostPort.length > 1) ?
+                                   Integer.parseInt(hostPort[1]) :
+                                   meshNode.getLocalAddress().getPort();
                         meshNode.connectPeer(new InetSocketAddress(hostPort[0], port));
                     }
                 }
