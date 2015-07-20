@@ -62,7 +62,7 @@
     <dependency>
       <groupId>com.addthis</groupId>
       <artifactId>basis</artifactId>
-      <version>3.0.4-SNAPSHOT</version>
+      <version>3.0.4</version>
     </dependency>
     <dependency>
       <groupId>io.netty</groupId>
