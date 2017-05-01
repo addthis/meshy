@@ -87,6 +87,10 @@ class MessageFile implements VirtualFileReference {
         return length;
     }
 
+    @Override public boolean isDirectory() {
+        return false;
+    }
+
     @Override
     public Iterator<VirtualFileReference> listFiles(PathMatcher filter) {
         synchronized (files) {

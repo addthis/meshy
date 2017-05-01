@@ -59,7 +59,7 @@ public class TestVFS extends TestMesh {
         files.waitComplete();
         Map<String, FileReference> map = files.getFileMap();
         log.info("map={}", map);
-        checkFile(map, new FileReference("/dummy", 0, 0).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/dummy", 0, 0, false).setHostUUID(server.getUUID()));
     }
 
     public static class DummyHandler implements LocalFileHandler {
@@ -102,6 +102,10 @@ public class TestVFS extends TestMesh {
         @Override
         public long getLength() {
             return 0;
+        }
+
+        @Override public boolean isDirectory() {
+            return false;
         }
 
         @Override

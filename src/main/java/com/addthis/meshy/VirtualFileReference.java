@@ -29,6 +29,8 @@ public interface VirtualFileReference {
 
     public long getLength();
 
+    public boolean isDirectory();
+
     public Iterator<VirtualFileReference> listFiles(@Nonnull PathMatcher filter);
 
     public VirtualFileReference getFile(String name);

@@ -36,32 +36,34 @@ public class TestFileService extends TestMesh {
         final MeshyServer server = getServer("src/test/files");
         final MeshyClient client = getClient(server);
         FileSource files = new FileSource(client, new String[]{
-                "*/*.xml",
-                "*/hosts",
+                "*/*",
+                "*/hosts"
         });
         files.waitComplete();
         log.info("file.list --> {}", files.getFileList());
         Map<String, FileReference> map = files.getFileMap();
-        checkFile(map, new FileReference("/a/abc.xml", 0, 4).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/a/def.xml", 0, 7).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/b/ghi.xml", 0, 4).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/b/jkl.xml", 0, 7).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/c/hosts", 0, 593366).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/mux/hosts", 0, 593366).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/abc.xml", 0, 4, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/def.xml", 0, 7, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/b/ghi.xml", 0, 4, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/b/jkl.xml", 0, 7, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/c/hosts", 0, 593366, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/mux/hosts", 0, 593366, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/d/dir", 0, 102, true).setHostUUID(server.getUUID()));
         /** second test exercises the cache */
         files = new FileSource(client, new String[]{
-                "*/*.xml",
+                "*/*",
                 "*/hosts",
         });
         files.waitComplete();
         log.info("file.list --> {}", files.getFileList());
         map = files.getFileMap();
-        checkFile(map, new FileReference("/a/abc.xml", 0, 4).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/a/def.xml", 0, 7).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/b/ghi.xml", 0, 4).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/b/jkl.xml", 0, 7).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/c/hosts", 0, 593366).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/mux/hosts", 0, 593366).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/abc.xml", 0, 4, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/def.xml", 0, 7, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/b/ghi.xml", 0, 4, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/b/jkl.xml", 0, 7, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/c/hosts", 0, 593366, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/mux/hosts", 0, 593366, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/d/dir", 0, 102, true).setHostUUID(server.getUUID()));
     }
 
     @Test
@@ -75,12 +77,12 @@ public class TestFileService extends TestMesh {
         files.waitComplete();
         log.info("file.list --> {}", files.getFileList());
         Map<String, FileReference> map = files.getFileMap();
-        checkFile(map, new FileReference("/a/abc.xml", 0, 4).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/a/def.xml", 0, 7).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/abc.xml", 0, 4, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/a/def.xml", 0, 7, false).setHostUUID(server.getUUID()));
         assertFalse(map.containsKey("/b/ghi.xml"));
         assertFalse(map.containsKey("/b/jkl.xml"));
-        checkFile(map, new FileReference("/c/hosts", 0, 593366).setHostUUID(server.getUUID()));
-        checkFile(map, new FileReference("/mux/hosts", 0, 593366).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/c/hosts", 0, 593366, false).setHostUUID(server.getUUID()));
+        checkFile(map, new FileReference("/mux/hosts", 0, 593366, false).setHostUUID(server.getUUID()));
     }
 
     @Test
@@ -98,26 +100,26 @@ public class TestFileService extends TestMesh {
         log.info("file.list --> {}", files.getFileList());
         Map<String, FileReference> map = files.getFileMap();
         log.info("file map --> {}", map);
-        checkFile(map, new FileReference("/abc.xml", 0, 4).setHostUUID(server1.getUUID()));
-        checkFile(map, new FileReference("/def.xml", 0, 7).setHostUUID(server1.getUUID()));
-        checkFile(map, new FileReference("/ghi.xml", 0, 4).setHostUUID(server2.getUUID()));
-        checkFile(map, new FileReference("/jkl.xml", 0, 7).setHostUUID(server2.getUUID()));
-        checkFile(map, new FileReference("/xyz.xml", 0, 10).setHostUUID(server3.getUUID()));
+        checkFile(map, new FileReference("/abc.xml", 0, 4, false).setHostUUID(server1.getUUID()));
+        checkFile(map, new FileReference("/def.xml", 0, 7, false).setHostUUID(server1.getUUID()));
+        checkFile(map, new FileReference("/ghi.xml", 0, 4, false).setHostUUID(server2.getUUID()));
+        checkFile(map, new FileReference("/jkl.xml", 0, 7, false).setHostUUID(server2.getUUID()));
+        checkFile(map, new FileReference("/xyz.xml", 0, 10, false).setHostUUID(server3.getUUID()));
     }
 
     @Test
     public void testEquals() throws Exception {
         FileReference[] refs = new FileReference[5];
 
-        refs[0] = new FileReference("/a/abc.xml", 0, 4);
-        refs[1] = new FileReference("/a/def.xml", 0, 7);
-        refs[2] = new FileReference(null, 0, 4);
+        refs[0] = new FileReference("/a/abc.xml", 0, 4, false);
+        refs[1] = new FileReference("/a/def.xml", 0, 7, false);
+        refs[2] = new FileReference(null, 0, 4, false);
 
         // refs[0] and refs[3] are equal
-        refs[3] = new FileReference("/a/abc.xml", 0, 4);
+        refs[3] = new FileReference("/a/abc.xml", 0, 4, false);
 
         // refs[2] and refs[4] are equal
-        refs[4] = new FileReference(null, 0, 4);
+        refs[4] = new FileReference(null, 0, 4, false);
 
         refs[0].setHostUUID("a");
         refs[1].setHostUUID("b");
@@ -151,10 +153,10 @@ public class TestFileService extends TestMesh {
     public void testHashCode() throws Exception {
         FileReference[] refs = new FileReference[4];
 
-        refs[0] = new FileReference("/a/abc.xml", 0, 4);
-        refs[1] = new FileReference("/a/abc.xml", 0, 4);
-        refs[2] = new FileReference(null, 0, 4);
-        refs[3] = new FileReference(null, 0, 4);
+        refs[0] = new FileReference("/a/abc.xml", 0, 4, false);
+        refs[1] = new FileReference("/a/abc.xml", 0, 4, false);
+        refs[2] = new FileReference(null, 0, 4, false);
+        refs[3] = new FileReference(null, 0, 4, false);
 
         refs[0].setHostUUID("a");
         refs[1].setHostUUID("a");

@@ -118,6 +118,10 @@ public class LocalFileHandlerMux implements LocalFileHandler {
             return null;
         }
 
+        @Override public boolean isDirectory() {
+            return false;
+        }
+
         @Override
         public VirtualFileInput getInput(Map<String, String> options) {
             try {
