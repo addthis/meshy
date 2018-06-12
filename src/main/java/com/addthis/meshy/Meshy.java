@@ -86,6 +86,8 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     // default channel watermarks to 10 MB and 5 MB
     static final int HIGH_WATERMARK = Parameter.intValue("meshy.channel.highWatermark", 10 * 1024) * 1024;
     static final int LOW_WATERMARK = Parameter.intValue("meshy.channel.lowWatermark", 5 * 1024) * 1024;
+    static final long QUIET_PERIOD = Parameter.longValue("meshy.shutdown.quietPeriod", 0L);
+    static final long SHUTDOWN_TIMEOUT = Parameter.longValue("meshy.shutdown.timeout", 60L);
 
     static final Map<Integer, Class<? extends SessionHandler>> idHandlerMap = new HashMap<>();
     static final Map<Class<? extends SessionHandler>, Integer> handlerIdMap = new HashMap<>();
@@ -200,7 +202,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     }
 
     @Override public void close() {
-        closeAsync().syncUninterruptibly();
+        closeAsync().awaitUninterruptibly().syncUninterruptibly();
     }
 
     public Future<?> closeAsync() {
@@ -209,7 +211,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
                 state.debugSessions();
             }
         }
-        return workerGroup.shutdownGracefully();
+        return workerGroup.shutdownGracefully(QUIET_PERIOD, Meshy.SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
     }
 
     protected ChannelFuture connect(InetSocketAddress addr) {
