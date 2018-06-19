@@ -27,7 +27,7 @@ import com.addthis.basis.util.Parameter;
 
 import com.addthis.meshy.service.file.FileTarget;
 
-import com.google.common.base.Objects;
+import com.google.common.base.MoreObjects;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
@@ -120,8 +120,8 @@ public class ChannelState extends ChannelDuplexHandler {
         }
     }
 
-    protected Objects.ToStringHelper toStringHelper() {
-        return Objects.toStringHelper(this)
+    protected MoreObjects.ToStringHelper toStringHelper() {
+        return MoreObjects.toStringHelper(this)
                 .add("targets", targetHandlers.size())
                 .add("sources", sourceHandlers.size())
                 .add("name", name)

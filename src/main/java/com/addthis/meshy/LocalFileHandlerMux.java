@@ -26,7 +26,7 @@ import com.addthis.muxy.MuxFile;
 import com.addthis.muxy.ReadMuxFileDirectory;
 import com.addthis.muxy.ReadMuxFileDirectoryCache;
 
-import com.google.common.base.Objects;
+import com.google.common.base.MoreObjects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,7 +130,7 @@ public class LocalFileHandlerMux implements LocalFileHandler {
 
         @Override
         public String toString() {
-            return Objects.toStringHelper(this)
+            return MoreObjects.toStringHelper(this)
                     .add("meta", meta)
                     .toString();
         }
