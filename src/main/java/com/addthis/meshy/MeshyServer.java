@@ -39,7 +39,7 @@ import com.addthis.basis.util.Parameter;
 import com.addthis.meshy.service.message.MessageFileSystem;
 import com.addthis.meshy.service.peer.PeerSource;
 
-import com.google.common.base.Objects;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Splitter;
 import com.google.common.hash.Hashing;
 
@@ -534,7 +534,7 @@ public class MeshyServer extends Meshy {
     }
 
     @Override public String toString() {
-        return Objects.toStringHelper(this)
+        return MoreObjects.toStringHelper(this)
                       .add("serverPort", serverPort)
                       .add("serverUuid", serverUuid)
                       .add("channelCount", getChannelCount())

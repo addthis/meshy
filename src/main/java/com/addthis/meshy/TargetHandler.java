@@ -16,7 +16,7 @@ package com.addthis.meshy;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.google.common.base.Objects;
+import com.google.common.base.MoreObjects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,8 +46,8 @@ public abstract class TargetHandler implements SessionHandler {
         this.session = session;
     }
 
-    protected Objects.ToStringHelper toStringHelper() {
-        return Objects.toStringHelper(this)
+    protected MoreObjects.ToStringHelper toStringHelper() {
+        return MoreObjects.toStringHelper(this)
                 .add("channelState", channelState.getName())
                 .add("session", session)
                 .add("complete", complete)
