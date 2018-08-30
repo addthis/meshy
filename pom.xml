@@ -35,6 +35,7 @@
     <project.build.targetJdk>1.8</project.build.targetJdk>
 
     <meshy.dep.netty4.version>4.0.28.Final</meshy.dep.netty4.version>
+    <dep.prometheus.version>0.0.22</dep.prometheus.version>
   </properties>
 
   <dependencyManagement>
@@ -76,6 +77,31 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-simple</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <version>9.4.5.v20170502</version>
+    </dependency>
+    <dependency>
+      <groupId>io.prometheus</groupId>
+      <artifactId>simpleclient</artifactId>
+      <version>${dep.prometheus.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.prometheus</groupId>
+      <artifactId>simpleclient_hotspot</artifactId>
+      <version>${dep.prometheus.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.prometheus</groupId>
+      <artifactId>simpleclient_servlet</artifactId>
+      <version>${dep.prometheus.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.prometheus.jmx</groupId>
+      <artifactId>collector</artifactId>
+      <version>0.10</version>
     </dependency>
   </dependencies>
 

@@ -42,13 +42,31 @@ import com.addthis.meshy.service.stream.StreamSource;
 
 import io.netty.util.concurrent.Future;
 
+import io.prometheus.client.hotspot.DefaultExports;
+import io.prometheus.jmx.JmxCollector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public final class Main {
 
+    private static HttpServer httpServer = null;
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
+    private static final String PROMETHEUS_CONFIG = "conf/prometheus_metrics.yml";
+
     public static void main(String[] args) throws Exception {
+        // initialize prometheus jvm metrics
+        httpServer = new HttpServer(8081);
+        closeOnShutdown();
+
         if (args.length == 0) {
             System.out.println("usage: client <host> <port> [cmd] [arg] ... | server <port,port> [root_dir] [peer,peer]");
             return;
         }
+
+        httpServer.start();
+        register();
+        DefaultExports.initialize();
+
         if ("client".equals(args[0]) && (args.length > 2)) {
             try (Meshy more = new MeshyClient(args[1], Integer.parseInt(args[2]))) {
                 if (args.length > 3) {
@@ -262,5 +280,29 @@ public final class Main {
                 }
             }
         }
+    }
+
+    private static void closeOnShutdown() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            httpServer.stop();
+        }));
+    }
+
+    public static void register() {
+        try {
+            File promConfig = new File(PROMETHEUS_CONFIG);
+            if(promConfig.exists()) {
+                new JmxCollector(promConfig).register();
+                log.info("Using prometheus config file: {}", PROMETHEUS_CONFIG);
+            } else {
+                new JmxCollector("").register();
+                log.warn("No prometheus config file found. Using prometheus default.");
+            }
+            DefaultExports.initialize();
+            log.info("Prometheus collector registered.");
+        } catch (Exception e) {
+            log.error("Prometheus collector not registered: ", e);
+        }
+
     }
 }

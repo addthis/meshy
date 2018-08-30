@@ -1,0 +1,20 @@
+---
+lowercaseOutputLabelNames: true
+lowercaseOutputName: true
+
+rules:
+
+# blacklist JMXONLY metrics
+- pattern: "^metrics<name=(.+)><>Count"
+  name: "$1_count"
+  type: COUNTER
+
+- pattern: "^metrics<name=(.+)><>Value"
+  name: "$1"
+  type: GAUGE
+
+- pattern: "^metrics<name=(.+)><>(50|75|95|98|99)thPercentile"
+  name: "$1"
+  type: GAUGE
+  labels:
+    percentile: "$2"
