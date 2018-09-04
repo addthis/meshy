@@ -55,7 +55,7 @@ public final class Main {
 
     public static void main(String[] args) throws Exception {
         // initialize prometheus jvm metrics
-        httpServer = new HttpServer(8081);
+        httpServer = new HttpServer(8086);
         closeOnShutdown();
 
         if (args.length == 0) {
