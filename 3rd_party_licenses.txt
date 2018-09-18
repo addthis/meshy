@@ -26,8 +26,9 @@ http://www.apache.org/licenses/LICENSE-2.0.html
 
 ---------------------------------------------------------------------------
 		SLF4J Simple Binding
+		SLF4J API Module
 
-SLF4J Simple Binding 1.7.25 uses MIT license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
+SLF4J Simple Binding 1.7.25 and SLF4J API Module 1.7.25 use MIT license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
 
 https://opensource.org/licenses/mit-license.php
 
@@ -41,22 +42,10 @@ http://www.eclipse.org/org/documents/epl-v10.php
 
 ---------------------------------------------------------------------------
 		Prometheus Java Simpleclient
-
-Prometheus Java Simpleclient 0.0.26 uses the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
-
-http://www.apache.org/licenses/LICENSE-2.0.html
-
----------------------------------------------------------------------------
 		Prometheus Java Simpleclient Hotspot
-
-Prometheus Java Simpleclient Hotspot 0.0.26 uses the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
-
-http://www.apache.org/licenses/LICENSE-2.0.html
-
----------------------------------------------------------------------------
 		Prometheus Java Simpleclient Servlet
 
-Prometheus Java Simpleclient Servlet 0.0.26 uses the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
+Prometheus Java Simpleclient 0.0.26, Prometheus Java Simpleclient Hotspot 0.0.26, Prometheus Java Simpleclient Servlet 0.0.26 use the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
 
 http://www.apache.org/licenses/LICENSE-2.0.html
 
@@ -67,9 +56,3 @@ Collector 0.10 uses the Apache 2.0 license, shown below. See the License for det
 
 http://www.apache.org/licenses/LICENSE-2.0.html
 
----------------------------------------------------------------------------
-		SLF4J API Module
-
-SLF4J API Module 1.7.25 uses MIT license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works.
-
-https://opensource.org/licenses/mit-license.php
