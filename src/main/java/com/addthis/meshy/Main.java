@@ -51,7 +51,6 @@ public final class Main {
 
     private static HttpServer httpServer = null;
     private static final Logger log = LoggerFactory.getLogger(Main.class);
-    private static final String PROMETHEUS_CONFIG = "conf/prometheus_metrics.yml";
 
     public static void main(String[] args) throws Exception {
         // initialize prometheus jvm metrics
@@ -290,6 +289,7 @@ public final class Main {
 
     public static void register() {
         try {
+            String PROMETHEUS_CONFIG = new Main().getClass().getClassLoader().getResource("prometheus_metrics.yml").getFile();
             File promConfig = new File(PROMETHEUS_CONFIG);
             if(promConfig.exists()) {
                 new JmxCollector(promConfig).register();
