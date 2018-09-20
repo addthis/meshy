@@ -293,12 +293,12 @@ public final class Main {
 
     public static void register() {
         try {
-            InputStream PROMETHEUS_CONFIG = new Main().getClass().getClassLoader().getResourceAsStream("prometheus_metrics.yml");
-            if(PROMETHEUS_CONFIG != null) {
-                BufferedReader bufferReader = new BufferedReader(new InputStreamReader(PROMETHEUS_CONFIG, Charset.defaultCharset()));
+            InputStream prometheusConfig = new Main().getClass().getClassLoader().getResourceAsStream("meshy_prometheus_metrics.yml");
+            if(prometheusConfig != null) {
+                BufferedReader bufferReader = new BufferedReader(new InputStreamReader(prometheusConfig, Charset.defaultCharset()));
                 new JmxCollector(bufferReader.lines().collect(Collectors.joining(System.lineSeparator()))).register();
                 bufferReader.close();
-                log.info("Using prometheus config file: {}", PROMETHEUS_CONFIG);
+                log.info("Using prometheus config file: {}", prometheusConfig);
             } else {
                 new JmxCollector("").register();
                 log.warn("No prometheus config file found. Using prometheus default.");
