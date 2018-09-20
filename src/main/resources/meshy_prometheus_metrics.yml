@@ -19,31 +19,21 @@ rules:
   labels:
     percentile: "$2"
 
-- pattern: ".*<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>Count"
-  name: "$3_count"
+- pattern: "(.*)<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>Count"
+  name: "$1_$2_$4_count"
   type: COUNTER
-  labels:
-    type: "$1"
-    scope: "$2"
 
-- pattern: ".*<type=\"(.+)\", name=\"(.+)\"><>Count"
-  name: "$2_count"
+- pattern: "(.*)<type=\"(.+)\", name=\"(.+)\"><>Count"
+  name: "$1_$2_$3_count"
   type: COUNTER
-  labels:
-    type: "$1"
 
-- pattern: ".*<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>Value"
-  name: "$3"
+- pattern: "(.*)<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>Value"
+  name: "$1_$2_$4"
+  type: GAUGE
+
+- pattern: "(.*)<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>(50|75|95|98|99|999)thPercentile"
+  name: "$1_$2_$4"
   type: GAUGE
   labels:
-    type: "$1"
-    scope: "$2"
-
-- pattern: ".*<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>(50|75|95|98|99|999)thPercentile"
-  name: "$3"
-  type: GAUGE
-  labels:
-    percentile: "$4"
-    type: "$1"
-    scope: "$2"
+    percentile: "$5"
 
