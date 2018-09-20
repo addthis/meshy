@@ -295,7 +295,9 @@ public final class Main {
         try {
             InputStream PROMETHEUS_CONFIG = new Main().getClass().getClassLoader().getResourceAsStream("prometheus_metrics.yml");
             if(PROMETHEUS_CONFIG != null) {
-                new JmxCollector(new BufferedReader(new InputStreamReader(PROMETHEUS_CONFIG, Charset.defaultCharset())).lines().collect(Collectors.joining(System.lineSeparator()))).register();
+                BufferedReader bufferReader = new BufferedReader(new InputStreamReader(PROMETHEUS_CONFIG, Charset.defaultCharset()));
+                new JmxCollector(bufferReader.lines().collect(Collectors.joining(System.lineSeparator()))).register();
+                bufferReader.close();
                 log.info("Using prometheus config file: {}", PROMETHEUS_CONFIG);
             } else {
                 new JmxCollector("").register();
