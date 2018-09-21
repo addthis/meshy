@@ -1,0 +1,39 @@
+---
+lowercaseOutputLabelNames: true
+lowercaseOutputName: true
+
+rules:
+
+# blacklist JMXONLY metrics
+- pattern: "^metrics<name=(.+)><>Count"
+  name: "$1_count"
+  type: COUNTER
+
+- pattern: "^metrics<name=(.+)><>Value"
+  name: "$1"
+  type: GAUGE
+
+- pattern: "^metrics<name=(.+)><>(50|75|95|98|99)thPercentile"
+  name: "$1"
+  type: GAUGE
+  labels:
+    percentile: "$2"
+
+- pattern: "\"(.*)\"<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>Count"
+  name: "$1_$2_$4_count"
+  type: COUNTER
+
+- pattern: "\"(.*)\"<type=\"(.+)\", name=\"(.+)\"><>Count"
+  name: "$1_$2_$3_count"
+  type: COUNTER
+
+- pattern: "\"(.*)\"<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>Value"
+  name: "$1_$2_$4"
+  type: GAUGE
+
+- pattern: "\"(.*)\"<type=\"(.+)\", scope=\"(.+)\", name=\"(.+)\"><>(50|75|95|98|99|999)thPercentile"
+  name: "$1_$2_$4"
+  type: GAUGE
+  labels:
+    percentile: "$5"
+

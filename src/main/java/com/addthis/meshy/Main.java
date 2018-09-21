@@ -16,6 +16,10 @@ package com.addthis.meshy;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.BufferedReader;
+import java.nio.charset.Charset;
+import java.util.stream.Collectors;
 
 import java.net.InetSocketAddress;
 
@@ -51,7 +55,6 @@ public final class Main {
 
     private static HttpServer httpServer = null;
     private static final Logger log = LoggerFactory.getLogger(Main.class);
-    private static final String PROMETHEUS_CONFIG = "conf/prometheus_metrics.yml";
 
     public static void main(String[] args) throws Exception {
         // initialize prometheus jvm metrics
@@ -290,10 +293,12 @@ public final class Main {
 
     public static void register() {
         try {
-            File promConfig = new File(PROMETHEUS_CONFIG);
-            if(promConfig.exists()) {
-                new JmxCollector(promConfig).register();
-                log.info("Using prometheus config file: {}", PROMETHEUS_CONFIG);
+            InputStream prometheusConfig = new Main().getClass().getClassLoader().getResourceAsStream("meshy_prometheus_metrics.yml");
+            if(prometheusConfig != null) {
+                BufferedReader bufferReader = new BufferedReader(new InputStreamReader(prometheusConfig, Charset.defaultCharset()));
+                new JmxCollector(bufferReader.lines().collect(Collectors.joining(System.lineSeparator()))).register();
+                bufferReader.close();
+                log.info("Using prometheus config file: {}", prometheusConfig);
             } else {
                 new JmxCollector("").register();
                 log.warn("No prometheus config file found. Using prometheus default.");
