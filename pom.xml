@@ -22,7 +22,7 @@
   <groupId>com.addthis</groupId>
   <artifactId>meshy</artifactId>
   <name>meshy</name>
-  <version>3.4.3</version>
+  <version>3.4.4-SNAPSHOT</version>
   <description>TCP multiplexing gearwheels</description>
   <licenses>
     <license>
@@ -173,7 +173,7 @@
     <connection>scm:git:git@github.com:addthis/meshy.git</connection>
     <developerConnection>scm:git:git@github.com:addthis/meshy.git</developerConnection>
     <url>https://github.com/addthis/meshy</url>
-    <tag>v3.4.3</tag>
+    <tag>HEAD</tag>
   </scm>
 
 </project>
