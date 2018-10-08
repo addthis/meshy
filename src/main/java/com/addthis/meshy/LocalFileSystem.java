@@ -24,6 +24,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.Collections;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,8 +32,6 @@ import java.nio.file.PathMatcher;
 
 import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.LessStrings;
-
-import com.google.common.collect.Iterators;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -151,7 +150,7 @@ public class LocalFileSystem implements VirtualFileSystem {
                 }
             }
             if (!Files.isDirectory(ptr.toPath())) {
-                return Iterators.emptyIterator();
+                return Collections.emptyIterator();
             }
             try (Stream<Path> files = Files.list(ptr.toPath()).filter(file -> filter.matches(file.getFileName()))) {
                 return files.map(FileReference::new)

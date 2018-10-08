@@ -35,8 +35,7 @@ import com.addthis.meshy.VirtualFileInput;
 import com.addthis.meshy.VirtualFileReference;
 import com.addthis.meshy.VirtualFileSystem;
 
-import com.google.common.base.Objects;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import org.slf4j.Logger;
@@ -84,7 +83,7 @@ public class StreamTarget extends TargetHandler implements Runnable, SendWatcher
     private boolean          startFrameReceived = false;
 
     @Override
-    protected Objects.ToStringHelper toStringHelper() {
+    protected MoreObjects.ToStringHelper toStringHelper() {
         return super.toStringHelper()
                     .add("closed", closed)
                     .add("streamComplete", streamComplete)

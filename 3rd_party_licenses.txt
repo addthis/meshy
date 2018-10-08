@@ -1,0 +1,101 @@
+
+ LICENSES FOR THIRD-PARTY COMPONENTS 
+
+===============================================================================
+   
+The following sections list licensing information for
+libraries included with the Meshy source and components
+used to test Meshy. 
+
+The following software may be included in this product:
+
+===============================================================================
+
+        Netty/All In One 
+
+  
+
+Netty/All In One 4.0.28.Final uses the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works. 
+
+  
+
+https://github.com/netty/netty/blob/4.0/LICENSE.txt 
+
+  
+
+--------------------------------------------------------------------------- 
+
+        Metrics Core Library 
+
+ Copyright 2010-2012 Coda Hale and Yammer, Inc. 
+
+Metrics Core Library 2.2.0 uses the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works. 
+
+  
+
+http://www.apache.org/licenses/LICENSE-2.0.html 
+
+  
+
+--------------------------------------------------------------------------- 
+
+        SLF4J Simple Binding 
+
+        SLF4J API Module 
+
+ Copyright (c) 2004-2007 QOS.ch 
+
+SLF4J Simple Binding 1.7.25 and SLF4J API Module 1.7.25 use MIT license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works. 
+
+  
+
+https://opensource.org/licenses/mit-license.php 
+
+  
+
+--------------------------------------------------------------------------- 
+
+        Jetty :: Servlet Handling 
+
+  
+
+Jetty :: Servlet Handling 9.4.5.v20170502 uses the Apache 2.0 license and Eclipse Public License - Version 1.0, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works. 
+
+  
+
+http://www.apache.org/licenses/LICENSE-2.0 
+
+http://www.eclipse.org/org/documents/epl-v10.php 
+
+  
+
+--------------------------------------------------------------------------- 
+
+        Prometheus Java Simpleclient 
+
+        Prometheus Java Simpleclient Hotspot 
+
+        Prometheus Java Simpleclient Servlet 
+
+  
+
+Prometheus Java Simpleclient 0.0.26, Prometheus Java Simpleclient Hotspot 0.0.26, Prometheus Java Simpleclient Servlet 0.0.26 use the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works. 
+
+  
+
+http://www.apache.org/licenses/LICENSE-2.0.html 
+
+  
+
+--------------------------------------------------------------------------- 
+
+        Collector 
+
+  
+
+Collector 0.10 uses the Apache 2.0 license, shown below. See the License for details about distribution rights, and the specific rights regarding derivate works. 
+
+  
+
+http://www.apache.org/licenses/LICENSE-2.0.html 
+
