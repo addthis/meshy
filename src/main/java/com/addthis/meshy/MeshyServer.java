@@ -339,13 +339,13 @@ public class MeshyServer extends Meshy {
     @Override
     public void close() {
         log.debug("{} exiting", this);
-        closeAsync().awaitUninterruptibly().syncUninterruptibly();
+        closeAsync().awaitUninterruptibly();
     }
 
     @Override public Future<?> closeAsync() {
         bossGroup.shutdownGracefully(Meshy.QUIET_PERIOD, Meshy.SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
         super.closeAsync();
-        return closeFuture.awaitUninterruptibly().syncUninterruptibly();
+        return closeFuture.awaitUninterruptibly();
     }
 
     public Future<?> closeFuture() {

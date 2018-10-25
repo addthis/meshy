@@ -202,7 +202,7 @@ public abstract class Meshy implements ChannelMaster, Closeable {
     }
 
     @Override public void close() {
-        closeAsync().awaitUninterruptibly().syncUninterruptibly();
+        closeAsync().awaitUninterruptibly();
     }
 
     public Future<?> closeAsync() {
