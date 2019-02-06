@@ -20,6 +20,7 @@ import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.addthis.meshy.service.file.FileReference;
@@ -113,7 +114,7 @@ public class MeshyClient extends Meshy {
         if (closed.compareAndSet(false, true)) {
             return super.closeAsync();
         } else {
-            return workerGroup.terminationFuture();
+            return workerGroup.shutdownGracefully(Meshy.QUIET_PERIOD, Meshy.SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
         }
     }
 

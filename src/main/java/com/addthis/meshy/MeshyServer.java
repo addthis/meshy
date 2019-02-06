@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.addthis.basis.util.LessBytes;
@@ -64,6 +65,7 @@ import io.netty.util.concurrent.DefaultPromise;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GlobalEventExecutor;
 import io.netty.util.concurrent.Promise;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 
@@ -337,13 +339,13 @@ public class MeshyServer extends Meshy {
     @Override
     public void close() {
         log.debug("{} exiting", this);
-        closeAsync().syncUninterruptibly();
+        closeAsync().awaitUninterruptibly();
     }
 
     @Override public Future<?> closeAsync() {
-        bossGroup.shutdownGracefully();
+        bossGroup.shutdownGracefully(Meshy.QUIET_PERIOD, Meshy.SHUTDOWN_TIMEOUT, TimeUnit.SECONDS);
         super.closeAsync();
-        return closeFuture;
+        return closeFuture.awaitUninterruptibly();
     }
 
     public Future<?> closeFuture() {
