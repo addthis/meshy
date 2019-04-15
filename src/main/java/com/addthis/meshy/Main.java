@@ -272,14 +272,16 @@ public final class Main {
                 });
             }
             if (args.length == 4) {
-                for (String peer : LessStrings.splitArray(args[3], ",")) {
-                    for (MeshyServer meshNode : meshNodes) {
+                for (MeshyServer meshNode : meshNodes) {
+                    LinkedList<InetSocketAddress> addresses = new LinkedList<>();
+                    for (String peer : LessStrings.splitArray(args[3], ",")) {
                         String[] hostPort = LessStrings.splitArray(peer, ":");
                         int port = (hostPort.length > 1) ?
-                                   Integer.parseInt(hostPort[1]) :
-                                   meshNode.getLocalAddress().getPort();
-                        meshNode.connectPeer(new InetSocketAddress(hostPort[0], port));
+                                Integer.parseInt(hostPort[1]) :
+                                meshNode.getLocalAddress().getPort();
+                        addresses.add(new InetSocketAddress(hostPort[0], port));
                     }
+                    meshNode.connectPeers(addresses);
                 }
             }
         }

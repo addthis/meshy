@@ -30,6 +30,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -76,6 +77,10 @@ public class MeshyServer extends Meshy {
     // permit peering in local VM
     private static final boolean allowPeerLocal = Parameter.boolValue("meshy.peer.local", true);
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
+
+    private static final int meshyUnitDelay = Parameter.intValue("mss.mesh.unitDelay", 900);
+    private static final int meshyMaxDelayUnit = Parameter.intValue("mss.mesh.maxDelayUnit", 3);
+    private static final int meshyMaxRetries = Parameter.intValue("mss.mesh.maxRetries", 5);
 
     static final Counter peerCountMetric = Metrics.newCounter(Meshy.class, "peerCount");
 
@@ -381,6 +386,25 @@ public class MeshyServer extends Meshy {
         future.awaitUninterruptibly();
         if (!future.isSuccess()) {
             log.warn("{} peer connect fail to {}", MeshyServer.this, address);
+        }
+    }
+
+    public void connectPeers(List<InetSocketAddress> addresses) {
+        connectPeers(addresses, meshyUnitDelay, meshyMaxDelayUnit, meshyMaxRetries);
+    }
+
+    public void connectPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit, int maxRetries) {
+        Backoff backoff = new Backoff(unitDelay, maxDelayUnit);
+        int retries=0;
+        while(getChannelCount()==0 && retries++<maxRetries) {
+            if (retries > 1) {
+                log.info("gagagaga mss will retry in: " + backoff.calcDelay() + " milliseconds.");
+            }
+            backoff.backoff();
+            backoff.inc();
+            for (InetSocketAddress address : addresses) {
+                connectPeer(address);
+            }
         }
     }
 
