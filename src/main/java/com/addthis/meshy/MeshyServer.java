@@ -78,9 +78,9 @@ public class MeshyServer extends Meshy {
     private static final boolean allowPeerLocal = Parameter.boolValue("meshy.peer.local", true);
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
 
-    private static final int meshyUnitDelay = Parameter.intValue("mss.mesh.unitDelay", 900);
-    private static final int meshyMaxDelayUnit = Parameter.intValue("mss.mesh.maxDelayUnit", 3);
-    private static final int meshyMaxRetries = Parameter.intValue("mss.mesh.maxRetries", 5);
+    private static final int meshyUnitDelay = Parameter.intValue("mss.mesh.retry.peers.unitDelay", 900);
+    private static final int meshyMaxDelayUnit = Parameter.intValue("mss.mesh.retry.peers.maxDelayUnit", 3);
+    private static final int meshyMaxRetries = Parameter.intValue("mss.mesh.retry.peers.maxRetries", 5);
 
     static final Counter peerCountMetric = Metrics.newCounter(Meshy.class, "peerCount");
 
@@ -398,7 +398,7 @@ public class MeshyServer extends Meshy {
         int retries=0;
         while(getChannelCount()==0 && retries++<maxRetries) {
             if (retries > 1) {
-                log.info("gagagaga mss will retry in: " + backoff.calcDelay() + " milliseconds.");
+                log.info("mss will retry initial connection to seeds in: " + backoff.calcDelay() + " milliseconds.");
             }
             backoff.backoff();
             backoff.inc();
