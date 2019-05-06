@@ -78,9 +78,9 @@ public class MeshyServer extends Meshy {
     private static final boolean allowPeerLocal = Parameter.boolValue("meshy.peer.local", true);
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
 
-    private static final int meshyUnitDelay = Parameter.intValue("mss.mesh.retry.peers.unitDelay", 900);
-    private static final int meshyMaxDelayUnit = Parameter.intValue("mss.mesh.retry.peers.maxDelayUnit", 3);
-    private static final int meshyMaxRetries = Parameter.intValue("mss.mesh.retry.peers.maxRetries", 5);
+    private static final int retryPeersUnitDelay = Parameter.intValue("mss.mesh.retry.peers.unitDelay", 900);
+    private static final int retryPeersMaxDelayUnit = Parameter.intValue("mss.mesh.retry.peers.maxDelayUnit", 3);
+    private static final int retryPeersMaxRetries = Parameter.intValue("mss.mesh.retry.peers.maxRetries", 5);
 
     static final Counter peerCountMetric = Metrics.newCounter(Meshy.class, "peerCount");
 
@@ -390,7 +390,7 @@ public class MeshyServer extends Meshy {
     }
 
     public void connectPeers(List<InetSocketAddress> addresses) {
-        connectPeers(addresses, meshyUnitDelay, meshyMaxDelayUnit, meshyMaxRetries);
+        connectPeers(addresses, retryPeersUnitDelay, retryPeersMaxDelayUnit, retryPeersMaxRetries);
     }
 
     public void connectPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit, int maxRetries) {
