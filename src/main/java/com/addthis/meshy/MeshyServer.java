@@ -79,8 +79,7 @@ public class MeshyServer extends Meshy {
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
 
     private static final int retryPeersUnitDelay = Parameter.intValue("mss.mesh.retry.peers.unitDelay", 900);
-    private static final int retryPeersMaxDelayUnit = Parameter.intValue("mss.mesh.retry.peers.maxDelayUnit", 3);
-    private static final int retryPeersMaxRetries = Parameter.intValue("mss.mesh.retry.peers.maxRetries", 5);
+    private static final int retryPeersMaxDelayUnit = Parameter.intValue("mss.mesh.retry.peers.maxDelayUnit", 7);
 
     static final Counter peerCountMetric = Metrics.newCounter(Meshy.class, "peerCount");
 
@@ -390,22 +389,11 @@ public class MeshyServer extends Meshy {
     }
 
     public void connectPeers(List<InetSocketAddress> addresses) {
-        connectPeers(addresses, retryPeersUnitDelay, retryPeersMaxDelayUnit, retryPeersMaxRetries);
+        connectPeers(addresses, retryPeersUnitDelay, retryPeersMaxDelayUnit);
     }
 
-    public void connectPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit, int maxRetries) {
-        Backoff backoff = new Backoff(unitDelay, maxDelayUnit);
-        int retries=0;
-        while(getChannelCount()==0 && retries++<maxRetries) {
-            if (retries > 1) {
-                log.info("mss will retry initial connection to seeds in: " + backoff.calcDelay() + " milliseconds.");
-            }
-            backoff.backoff();
-            backoff.inc();
-            for (InetSocketAddress address : addresses) {
-                connectPeer(address);
-            }
-        }
+    public void connectPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit) {
+        startAutoConnectToPeers(addresses, unitDelay, maxDelayUnit);
     }
 
     public boolean blockPeer(final String peerUuid) {
@@ -555,6 +543,13 @@ public class MeshyServer extends Meshy {
         // create UDP broadcast / listener
         Thread t = new Thread(new AutoMeshTask(this, group, timeout, port),
                               "AutoMesh Peer Listener (port: " + port + ")");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void startAutoConnectToPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit){
+        Thread t= new Thread(new AutoConnectToPeersTask(this, addresses, unitDelay, maxDelayUnit),
+                "AutoConnectToPeers");
         t.setDaemon(true);
         t.start();
     }
