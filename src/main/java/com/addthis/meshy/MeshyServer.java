@@ -30,6 +30,7 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -157,14 +158,14 @@ public class MeshyServer extends Meshy {
     private final NetworkInterface serverNetIf;
 
     public MeshyServer(int port) throws IOException {
-        this(port, new File("."));
+        this(port, new File("."), null);
     }
 
-    public MeshyServer(int port, File rootDir) throws IOException {
-        this(port, rootDir, null, new MeshyServerGroup());
+    public MeshyServer(int port, File rootDir, List<InetSocketAddress> peers) throws IOException {
+        this(port, rootDir, null, new MeshyServerGroup(), peers);
     }
 
-    public MeshyServer(final int port, final File rootDir, @Nullable String[] netif, final MeshyServerGroup group)
+    public MeshyServer(final int port, final File rootDir, @Nullable String[] netif, final MeshyServerGroup group, List<InetSocketAddress> peers)
             throws IOException {
         super();
         this.group = group;
@@ -248,6 +249,8 @@ public class MeshyServer extends Meshy {
         group.join(this);
         if (autoMesh) {
             startAutoMesh(serverPort, autoMeshTimeout);
+        } else if (peers != null && peers.size() > 0){
+            startAutoConnectToPeers(peers, autoMeshTimeout);
         }
     }
 
@@ -531,6 +534,13 @@ public class MeshyServer extends Meshy {
         // create UDP broadcast / listener
         Thread t = new Thread(new AutoMeshTask(this, group, timeout, port),
                               "AutoMesh Peer Listener (port: " + port + ")");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private void startAutoConnectToPeers(List<InetSocketAddress> addresses, int timeout){
+        Thread t= new Thread(new AutoConnectToPeersTask(this, addresses, timeout),
+                "AutoConnectToPeers");
         t.setDaemon(true);
         t.start();
     }

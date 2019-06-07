@@ -248,11 +248,19 @@ public final class Main {
                 }
                 switch (args.length) {
                     case 2:
-                        meshNodes.add(new MeshyServer(portNum, new File("."), netIf, group));
+                        meshNodes.add(new MeshyServer(portNum, new File("."), netIf, group, null));
                         break;
                     case 3:
+                        meshNodes.add(new MeshyServer(portNum, new File(args[2]), netIf, group, null));
+                        break;
                     case 4:
-                        meshNodes.add(new MeshyServer(portNum, new File(args[2]), netIf, group));
+                        LinkedList<InetSocketAddress> addresses = new LinkedList<>();
+                        for (String peer : LessStrings.splitArray(args[3], ",")) {
+                            String[] hostPort = LessStrings.splitArray(peer, ":");
+                            int portPortion = (hostPort.length > 1) ? Integer.parseInt(hostPort[1]) : portNum;
+                            addresses.add(new InetSocketAddress(hostPort[0], portPortion));
+                        }
+                        meshNodes.add(new MeshyServer(portNum, new File(args[2]), netIf, group, addresses));
                         break;
                 }
             }
@@ -270,17 +278,6 @@ public final class Main {
                         // the JVM is shutting down
                     }
                 });
-            }
-            if (args.length == 4) {
-                for (String peer : LessStrings.splitArray(args[3], ",")) {
-                    for (MeshyServer meshNode : meshNodes) {
-                        String[] hostPort = LessStrings.splitArray(peer, ":");
-                        int port = (hostPort.length > 1) ?
-                                   Integer.parseInt(hostPort[1]) :
-                                   meshNode.getLocalAddress().getPort();
-                        meshNode.connectPeer(new InetSocketAddress(hostPort[0], port));
-                    }
-                }
             }
         }
     }
