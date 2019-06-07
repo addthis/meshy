@@ -33,11 +33,10 @@ class AutoConnectToPeersTask implements Runnable {
 
     @Override public void run() {
         while (true) {
-            log.info("mss will try connection to seeds again in: " + timeout + " milliseconds.");
+            log.debug("mss will try connection to seeds again in: " + timeout + " milliseconds.");
             try {
                 Thread.sleep(timeout);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            } catch (InterruptedException ignored) {
             }
             for (InetSocketAddress address : addresses) {
                 meshyServer.connectPeer(address);
