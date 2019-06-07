@@ -77,7 +77,7 @@ public class TestMesh {
     }
 
     public MeshyServer getServer(int port, String root) throws IOException {
-        MeshyServer server = new MeshyServer(port, new File(root));
+        MeshyServer server = new MeshyServer(port, new File(root), null);
         resources.add(server);
         return server;
     }

@@ -78,9 +78,6 @@ public class MeshyServer extends Meshy {
     private static final boolean allowPeerLocal = Parameter.boolValue("meshy.peer.local", true);
     private static final int autoMeshTimeout = Parameter.intValue("meshy.autoMeshTimeout", 60000);
 
-    private static final int retryPeersUnitDelay = Parameter.intValue("mss.mesh.retry.peers.unitDelay", 900);
-    private static final int retryPeersMaxDelayUnit = Parameter.intValue("mss.mesh.retry.peers.maxDelayUnit", 7);
-
     static final Counter peerCountMetric = Metrics.newCounter(Meshy.class, "peerCount");
 
     private static final ArrayList<byte[]> vmLocalNet = new ArrayList<>(3);
@@ -161,14 +158,14 @@ public class MeshyServer extends Meshy {
     private final NetworkInterface serverNetIf;
 
     public MeshyServer(int port) throws IOException {
-        this(port, new File("."));
+        this(port, new File("."), null);
     }
 
-    public MeshyServer(int port, File rootDir) throws IOException {
-        this(port, rootDir, null, new MeshyServerGroup());
+    public MeshyServer(int port, File rootDir, List<InetSocketAddress> peers) throws IOException {
+        this(port, rootDir, null, new MeshyServerGroup(), peers);
     }
 
-    public MeshyServer(final int port, final File rootDir, @Nullable String[] netif, final MeshyServerGroup group)
+    public MeshyServer(final int port, final File rootDir, @Nullable String[] netif, final MeshyServerGroup group, List<InetSocketAddress> peers)
             throws IOException {
         super();
         this.group = group;
@@ -252,6 +249,8 @@ public class MeshyServer extends Meshy {
         group.join(this);
         if (autoMesh) {
             startAutoMesh(serverPort, autoMeshTimeout);
+        } else if (peers != null && peers.size() > 0){
+            startAutoConnectToPeers(peers, autoMeshTimeout);
         }
     }
 
@@ -386,14 +385,6 @@ public class MeshyServer extends Meshy {
         if (!future.isSuccess()) {
             log.warn("{} peer connect fail to {}", MeshyServer.this, address);
         }
-    }
-
-    public void connectPeers(List<InetSocketAddress> addresses) {
-        connectPeers(addresses, retryPeersUnitDelay, retryPeersMaxDelayUnit);
-    }
-
-    public void connectPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit) {
-        startAutoConnectToPeers(addresses, unitDelay, maxDelayUnit);
     }
 
     public boolean blockPeer(final String peerUuid) {
@@ -547,8 +538,8 @@ public class MeshyServer extends Meshy {
         t.start();
     }
 
-    private void startAutoConnectToPeers(List<InetSocketAddress> addresses, int unitDelay, int maxDelayUnit){
-        Thread t= new Thread(new AutoConnectToPeersTask(this, addresses, unitDelay, maxDelayUnit),
+    private void startAutoConnectToPeers(List<InetSocketAddress> addresses, int timeout){
+        Thread t= new Thread(new AutoConnectToPeersTask(this, addresses, timeout),
                 "AutoConnectToPeers");
         t.setDaemon(true);
         t.start();
