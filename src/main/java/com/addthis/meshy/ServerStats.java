@@ -27,6 +27,6 @@ public class ServerStats {
         channelCount = server.getChannelCount();
         peerCount = server.getServerPeerCount();
         MeshyServer.peerCountMetric.clear();
-        MeshyServer.peerCountMetric.inc(server.getChannelCount());
+        MeshyServer.peerCountMetric.inc(server.getServerPeerCount());
     }
 }
