@@ -257,7 +257,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             localFindTimer.update(localRunTime, TimeUnit.MILLISECONDS);
         } finally {
             if (forwardMetaData) {
-                FileReference flagRef = new FileReference("localfind", 0, 0);
+                FileReference flagRef = new FileReference("localfind", 0, 0, false);
                 FileTarget.this.send(flagRef.encode(null));
             }
             //Expected conditions under which we should cleanup: If we do not expect a response from the mesh
@@ -362,7 +362,7 @@ public class FileTarget extends TargetHandler implements Runnable {
 
     private void forwardPeerList(Collection<Channel> peerList) {
         int peerCount = peerList.size();
-        FileReference flagRef = new FileReference("peers", 0, peerCount);
+        FileReference flagRef = new FileReference("peers", 0, peerCount, false);
         send(flagRef.encode(FileTarget.peersToString(peerList)));
     }
 
@@ -550,7 +550,7 @@ public class FileTarget extends TargetHandler implements Runnable {
             super.receiveComplete(state, completedSession);
             if (forwardMetaData) {
                 int peerCount = getPeerCount();
-                FileReference flagRef = new FileReference("response", 0, peerCount);
+                FileReference flagRef = new FileReference("response", 0, peerCount, false);
                 FileTarget.this.send(flagRef.encode(state.getChannelRemoteAddress().getHostName()));
             }
             if (doComplete.compareAndSet(true, false) && !firstDone.compareAndSet(false, true)) {

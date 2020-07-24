@@ -28,17 +28,19 @@ public class FileReference {
     public final String name;
     public final long lastModified;
     public final long size;
+    public final boolean isDirectory;
 
     private String hostUUID;
 
-    public FileReference(final String name, final long last, final long size) {
+    public FileReference(final String name, final long last, final long size, final boolean isDirectory) {
         this.name = name;
         this.lastModified = last;
         this.size = size;
+        this.isDirectory = isDirectory;
     }
 
     public FileReference(final String prefix, final VirtualFileReference ref) {
-        this(prefix + '/' + ref.getName(), ref.getLastModified(), ref.getLength());
+        this(prefix + '/' + ref.getName(), ref.getLastModified(), ref.getLength(), ref.isDirectory());
     }
 
     public FileReference(final byte[] data) throws IOException {
@@ -47,6 +49,7 @@ public class FileReference {
         lastModified = LessBytes.readLength(in);
         size = LessBytes.readLength(in);
         hostUUID = LessBytes.readString(in);
+        isDirectory = in.read() == 1;
     }
 
     /**
@@ -63,11 +66,12 @@ public class FileReference {
 
     byte[] encode(String uuid) {
         try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream(name.length() * 2 + 12);
+            ByteArrayOutputStream out = new ByteArrayOutputStream(name.length() * 2 + 13);
             LessBytes.writeString(name, out);
             LessBytes.writeLength(lastModified, out);
             LessBytes.writeLength(size, out);
             LessBytes.writeString(uuid != null ? uuid : hostUUID, out);
+            out.write(isDirectory ? 1 : 0);
             return out.toByteArray();
         } catch (IOException ie) {
             //using ByteArrayOutputStream. Cant actually throw these
@@ -77,7 +81,7 @@ public class FileReference {
 
     @Override
     public String toString() {
-        return "[nm=" + name + ",lm=" + lastModified + ",sz=" + size + ",uu=" + hostUUID + ']';
+        return "[nm=" + name + ",lm=" + lastModified + ",sz=" + size + ",dir=" + isDirectory + ",uu=" + hostUUID + ']';
     }
 
     @Override
@@ -98,6 +102,9 @@ public class FileReference {
         if (size != otherReference.size) {
             return false;
         }
+        if (isDirectory != otherReference.isDirectory) {
+            return false;
+        }
         if (!Objects.equal(hostUUID, otherReference.hostUUID)) {
             return false;
         }
@@ -106,6 +113,6 @@ public class FileReference {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(name, lastModified, size, hostUUID);
+        return Objects.hashCode(name, lastModified, size, isDirectory, hostUUID);
     }
 }

@@ -118,6 +118,11 @@ public class LocalFileSystem implements VirtualFileSystem {
             return ptr.length();
         }
 
+        @Override
+        public boolean isDirectory() {
+            return ptr.isDirectory();
+        }
+
         @Nullable @Override
         public Iterator<VirtualFileReference> listFiles(@Nonnull final PathMatcher filter) {
             try {
